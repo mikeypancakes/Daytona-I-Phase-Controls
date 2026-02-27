@@ -1,0 +1,62 @@
+{
+  "fill": 16.2,
+  "trap": 0.3,
+  "release": 3.2,
+  "sipPeriod": 200,
+  "stallDuration": 5.0,
+  "fillFrequency": 15,
+  "fillAmp": 4,
+  "trapFrequency": 15,
+  "trapAmp": 4,
+  "releaseFrequency": 15,
+  "releaseAmp": 15,
+  "flushVoltage": -5,
+  "wait_for_ready": true,
+  "mode": "HDC",
+  "HDCpath": "Both",
+  "JHpath": "Passthrough",
+  "pathA_traveling_wave_profile": {
+    "initial_state": {
+      "frequency": 40000,
+      "amplitude": 20
+    },
+    "ramps": [
+      {
+        "time": 100,
+        "state": {
+          "frequency": 25000,
+          "amplitude": 30
+        }
+      },
+      {
+        "time": 300,
+        "state": {
+          "frequency": 15000,
+          "amplitude": 35
+        }
+      }
+    ]
+  },
+    "pathB_traveling_wave_profile": {
+    "initial_state": {
+      "frequency": 40000,
+      "amplitude": 20
+    },
+    "ramps": [
+      {
+        "time": 100,
+        "state": {
+          "frequency": 25000,
+          "amplitude": 30
+        }
+      },
+      {
+        "time": 300,
+        "state": {
+          "frequency": 15000,
+          "amplitude": 35
+        }
+      }
+    ]
+  }
+}

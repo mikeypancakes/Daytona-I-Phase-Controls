@@ -1,0 +1,32 @@
+Canonical Name,Board ID,Parameter,Setpoint
+Digitizer Gate.DIO,0,150,0
+Switch Push One.setpoint,4,184,0
+Switch Gate Three.setpoint,4,183,0
+Switch Gate Three.control,4,189,0
+Entrance Traveling Wave.amplitude,4,151,0
+Entrance Traveling Wave.frequency,4,186,1
+Entrance Traveling Wave.direction,4,252,0
+Path A Gate.setpoint,4,181,0
+Path A Gate.control,4,147,0
+Path A Guard.setpoint,4,182,0
+Path A.direction,4,250,0
+Switch Push Two.setpoint,5,184,0
+Switch Gate Four.setpoint,5,183,0
+Switch Gate Four.control,5,189,0
+Path B Gate.setpoint,5,181,0
+Path B Gate.control,5,147,0
+Path B Guard.setpoint,5,182,0
+Path B.direction,5,250,0
+Switch Gate One.setpoint,6,181,0
+Switch Gate One.control,6,147,0
+Switch Gate Two.setpoint,6,183,0
+Switch Gate Two.control,6,189,0
+Static Guard.setpoint,6,184,0
+Waste Traveling Wave.amplitude,6,151,0
+Waste Traveling Wave.frequency,6,186,1
+Waste Traveling Wave.direction,6,252,0
+OBA Travelling Wave.amplitude,6,154,0
+OBA Travelling Wave.frequency,6,187,1
+OBA Travelling Wave.direction,6,254,0
+Fill Gate.setpoint,6,182,0
+Fill Gate.control,6,188,0

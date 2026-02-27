@@ -1,0 +1,8 @@
+Canonical Name,Board ID,Parameter,Setpoint,Readback
+Use SA220E.DIO,0,149,0,
+Path A.gate,4,181,0,
+Path A Separation Traveling Wave.amplitude,4,148,0,
+Path A Separation Traveling Wave.frequency,4,185,0,
+Path A Separation Traveling Wave.direction,4,250,0,
+Path A Dynamic Guard.setpoint,4,184,0,
+Path A Gate.control,4,147,0,
