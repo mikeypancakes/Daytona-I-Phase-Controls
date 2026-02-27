@@ -8,7 +8,7 @@ import pyqtgraph as pg
 from gui.tt_popup import ttPopup
 from ics_client.client import ICS_Client
 from workers.request_worker import RequestWorker
-from tt_engine.tt_builder import Daytona_HDC_tt
+from tt_engine.tt_builder import Daytona_HDC_tt, Daytona_SinglePath_tt
 from scripts.fpga_map import SC, TW
 
 class DaytonaGUI(QtWidgets.QMainWindow):
@@ -17,11 +17,18 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         ui_path = os.path.join(os.path.dirname(__file__), 'gui.ui')
         uic.loadUi(ui_path, self)
 
+        version = "v0.1"
+        title = "Daytona I-Phase Controls"
+        self.menuVersion.setTitle(version)
+        self.setWindowTitle(title)
+
         #Path options
         self.HDC_paths = ["Both", "Path A", "Path B"]
         self.JH_paths = ["Passthrough", "Around", "Alternating"]
+        self.ICD_options = ["Default", "Jughandle"]
         self.pathComboBox.addItems(self.HDC_paths)
         self.JHpathComboBox.addItems(self.JH_paths)
+        self.ICDComboBox.addItems(self.ICD_options)
 
         self.updateGUI_with_intent(os.path.join(os.path.dirname(__file__), "config", "default_daytona_intent.json"))
 
@@ -310,7 +317,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
     
     def generate_tt(self):
         intent = self.build_intent()
-        tt = Daytona_HDC_tt(intent=intent)
+        tt = Daytona_HDC_tt(intent=intent) if intent['HDCpath'] == 'Both' else Daytona_SinglePath_tt(intent=intent)
         tt_dictionary = tt.get_tts()
         tt_dict = {}
         for module in list(tt_dictionary.keys()):

@@ -12,7 +12,7 @@
   "releaseAmp": 15,
   "flushVoltage": -5,
   "wait_for_ready": true,
-  "mode": "HDC",
+  "ICD": "Default",
   "HDCpath": "Both",
   "JHpath": "Passthrough",
   "pathA_traveling_wave_profile": {

@@ -1,6 +1,29 @@
 from tt_engine.tt_dataclass import Module, Step, opcodeCommand
 import numpy as np
-class Daytona_HDC_tt():
+
+class DaytonaBase:
+    def get_tt_dictionary(self) -> dict[str, list[Step]]:
+        modules = [
+            self.TWAVE_Module_PathA,
+            self.TWAVE_Module_PathB,
+            self.TWAVE_Module_PathC,
+            self.CONTROL_Module,
+        ]
+        return {
+            m.name: sorted(m.steps, key=lambda s: (s.abs_time_ms, s.priority))
+            for m in modules
+        }
+
+    def get_tts(self):
+        tt_dict = self.get_tt_dictionary()
+        cleaned_tt_dict = {}
+
+        for module_name, steps in tt_dict.items():
+            cleaned_tt_dict[module_name] = list(steps)
+
+        return cleaned_tt_dict
+
+class Daytona_HDC_tt(DaytonaBase):
     def __init__(self, intent=None):
         self.TWAVE_Module_PathA = Module("4")
         self.TWAVE_Module_PathB = Module("5")
@@ -68,6 +91,8 @@ class Daytona_HDC_tt():
         Therefore, absolute time in ms is defined as abs_time_ms = release time
 
         Second fill is offset from the intitial release by the fill time + trap time + release time.
+
+        Entrance travelling wave is static in Daytona and must be set via the method.
         '''
         self.TWAVE_Module_PathC.add_step("Waste Traveling Wave.direction", #Set FWD to begin fill
                                          1.0, 
@@ -130,7 +155,6 @@ class Daytona_HDC_tt():
                                         opcodeCommand.WRITE, 
                                         abs_time_ms)
         
-        #Path B Trap
         trap_offset = self.intent['release'] + self.intent['fill'] + self.intent['trap']  #offset the start of the trap on path B by the release + fill
         
         self.TWAVE_Module_PathC.add_step("Fill Gate.control", #Close fill gate, begin trap                     
@@ -291,22 +315,6 @@ class Daytona_HDC_tt():
                                          + self.intent['release'] + self.intent['fill'],
                                          priority=2)
 
-    def get_tt_dictionary(self) -> dict[str, list[Step]]:
-        modules = [self.TWAVE_Module_PathA, self.TWAVE_Module_PathB, 
-                self.TWAVE_Module_PathC, self.CONTROL_Module]
-        return {m.name: sorted(m.steps, key=lambda s: (s.abs_time_ms, s.priority)) for m in modules}
-    
-    def get_tts(self):
-
-        tt_dict = self.get_tt_dictionary()
-        cleaned_tt_dict = {}
-        for module_name, steps in tt_dict.items():
-            cleaned_steps = []
-            for step in steps:
-                cleaned_steps.append(step)
-            cleaned_tt_dict[module_name] = cleaned_steps
-        return cleaned_tt_dict
-
     def build_twrs(self, SIP_period):
         twr_dict = {}
         twr_profiles = ['pathA_traveling_wave_profile', 'pathB_traveling_wave_profile']
@@ -337,5 +345,197 @@ class Daytona_HDC_tt():
 
             print(times, freqs, sip_freq)       
 
+class Daytona_SinglePath_tt(DaytonaBase):
 
+    def __init__(self, intent=None):
+
+        self.TWAVE_Module_PathA = Module("4")
+        self.TWAVE_Module_PathB = Module("5")
+        self.TWAVE_Module_PathC = Module("6")
+        self.CONTROL_Module = Module("0")
+        self.intent = intent
+        self.flush_time = 5.0
+
+        self.pathSelection_dict = {
+            'Path A' : [self.TWAVE_Module_PathA, 'Path A Gate.control', 'Path A Dynamic Guard.setpoint'], #Gate mapping based on user path selection
+            'Path B' : [self.TWAVE_Module_PathB, 'Path B Gate.control', 'Path A Dynamic Guard.setpoint']
+        }
+
+        #Timing Table Saugage Maker
+
+        sep_dt, oba_dt = self.dead_time_calc()
+
+        self.init_steps(abs_time_ms=0.0)
+        self.fill(abs_time_ms=self.intent['release'] + oba_dt)
+        self.trap(abs_time_ms=self.intent['release'] + self.intent['fill'] + oba_dt)
+        self.release(abs_time_ms=0.0) #i know, its confusing, but we start with release
+        #self.stall(abs_time_ms=self.intent['sipPeriod'] - self.intent['stallDuration']) I dont think were going to stall on single path...
+        self.flush(abs_time_ms=self.intent['sipPeriod'] + sep_dt - self.flush_time)
+        self.wait(abs_time_ms=self.intent['release'] + self.intent['fill'] + oba_dt + self.intent['trap'])
+        #self.build_twrs(SIP_period=self.intent['sipPeriod']) Not ready yet.
+
+    def init_steps(self, abs_time_ms):
+
+        #Init Path A
+        self.TWAVE_Module_PathA.add_step("Path A Dynamic Guard.setpoint", 
+                                         abs(self.intent['flushVoltage']), 
+                                         opcodeCommand.WRITE, 
+                                         abs_time_ms, priority=-1)
+        self.TWAVE_Module_PathA.add_step("Path A Gate.control", 
+                                         0.0, #Close gate
+                                         opcodeCommand.WRITE, 
+                                         abs_time_ms, priority=-1)
+        self.TWAVE_Module_PathA.add_step("TW1_NO_OP",
+                                         0.0, 
+                                         opcodeCommand.WAIT, #WAIT_4_READY to start release sequence on receipt of sync pulse
+                                         abs_time_ms, priority=-1)
+
+        #Init Path B
+        self.TWAVE_Module_PathB.add_step("Path B Dynamic Guard.setpoint", 
+                                         abs(self.intent['flushVoltage']),
+                                         opcodeCommand.WRITE, 
+                                         abs_time_ms, priority=-1)
         
+        #Init OBA+Path C
+        self.TWAVE_Module_PathC.add_step("Path C Dynamic Guard.setpoint", 
+                                         abs(self.intent['flushVoltage']), 
+                                         opcodeCommand.WRITE, 
+                                         abs_time_ms, priority=-1)
+        
+        self.TWAVE_Module_PathC.add_step("TW3_NO_OP",
+                                     0.0, 
+                                     opcodeCommand.WAIT, #WAIT_4_SYNC to delay the opening of fill gate
+                                     abs_time_ms)
+        
+        #Init Control Board
+        self.CONTROL_Module.add_step("Digitizer Gate.DIO",
+                                     0.0, 
+                                     opcodeCommand.WRITE, #Digitizer gate low.
+                                     abs_time_ms, priority=-1)
+        self.CONTROL_Module.add_step("CB_NO_OP",
+                                     0.0, 
+                                     opcodeCommand.WAIT, #WAIT_4_SYNC
+                                     abs_time_ms)
+    
+    def fill(self, abs_time_ms):
+        '''
+        Fill sequence for SINGLE PATH ONLY. It assumes the timing table cycle begins on a release.
+        Therefore, absolute time in ms is defined as abs_time_ms = release time + OBA dead time
+
+        Entrance travelling wave is static in Daytona and must be set via the method.
+
+        Only one path is used.
+        '''
+
+        self.TWAVE_Module_PathC.add_step("Waste Traveling Wave.direction", #Set FWD to begin fill
+                                         1.0, 
+                                         opcodeCommand.WRITE, 
+                                         abs_time_ms) #Begin fill after release at start of loop
+        self.TWAVE_Module_PathC.add_step("OBA Traveling Wave.amplitude", #Set OBA fill amplitude
+                                        self.intent['fillAmp'], 
+                                        opcodeCommand.WRITE, 
+                                        abs_time_ms) 
+        self.TWAVE_Module_PathC.add_step("OBA Traveling Wave.frequency", #Set OBA fill frequency                 
+                                        self.intent['fillFrequency'], 
+                                        opcodeCommand.WRITE, 
+                                        abs_time_ms)
+        self.TWAVE_Module_PathC.add_step("Fill Gate.control", #Open fill gate
+                                         1.0, 
+                                         opcodeCommand.WRITE, 
+                                         abs_time_ms)
+
+    def trap(self, abs_time_ms):
+        '''
+        Trap sequence for single path. The  trap in absolute time is defined as:
+        abs_time_ms = release time + fill time + OBA dead time
+
+        Second trap is offset from the intitial release by the fill time + trap time + release time.
+        '''
+        #Path A Trap
+        self.TWAVE_Module_PathC.add_step("Fill Gate.control", #Close fill gate, begin trap
+                                        0.0, 
+                                        opcodeCommand.WRITE, 
+                                        abs_time_ms)
+        self.TWAVE_Module_PathC.add_step("Waste Traveling Wave.direction", #Set REV to send ions to ICD
+                                        0.0, 
+                                        opcodeCommand.WRITE, 
+                                        abs_time_ms)
+        self.TWAVE_Module_PathC.add_step("OBA Traveling Wave.amplitude", #Close fill gate, begin trap
+                                        self.intent['trapAmp'], 
+                                        opcodeCommand.WRITE, 
+                                        abs_time_ms)
+        self.TWAVE_Module_PathC.add_step("OBA Traveling Wave.frequency", #Close fill gate, begin trap                 
+                                        self.intent['trapFrequency'], 
+                                        opcodeCommand.WRITE, 
+                                        abs_time_ms)
+        
+    def release(self, abs_time_ms):
+        '''
+        Release sequence for Path A and Path B. The first release in absolute time is defined as:
+        abs_time_ms = 0. Release begins on receipt of sync pulse.
+        '''
+
+        self.pathSelection_dict[self.intent['HDCpath']][0].add_step(self.pathSelection_dict[self.intent['HDCpath']][2], 
+                                         abs(self.intent['flushVoltage']), #End flush
+                                         opcodeCommand.WRITE, 
+                                         abs_time_ms)
+        self.pathSelection_dict[self.intent['HDCpath']][0].add_step("OBA Traveling Wave.amplitude", #Close fill gate, begin trap
+                                         self.intent['releaseAmp'], 
+                                         opcodeCommand.WRITE, 
+                                         abs_time_ms)
+        self.pathSelection_dict[self.intent['HDCpath']][0].add_step("OBA Traveling Wave.frequency", #Close fill gate, begin trap
+                                         self.intent['releaseFrequency'], 
+                                         opcodeCommand.WRITE, 
+                                         abs_time_ms)
+        self.pathSelection_dict[self.intent['HDCpath']][0].add_step("OBA Traveling Wave.direction",
+                                         1.0 if self.intent['HDCpath'] == 'Path A' else 0.0, #Set FWD to go down path A
+                                         opcodeCommand.WRITE, 
+                                         abs_time_ms)
+        self.pathSelection_dict[self.intent['HDCpath']][0].add_step(self.pathSelection_dict[self.intent['HDCpath']][1], 
+                                         1.0, #Open gate
+                                         opcodeCommand.WRITE, 
+                                         abs_time_ms)
+        
+    def flush(self, abs_time_ms):
+        '''
+        Flush sequence for Single Path and Path C.
+        '''
+        #Path Flush
+        self.pathSelection_dict[self.intent['HDCpath']][0].add_step(self.pathSelection_dict[self.intent['HDCpath']][2], 
+                                         self.intent['flushVoltage'], 
+                                         opcodeCommand.WRITE, 
+                                         abs_time_ms) #Flush selected path
+        #Path C Flush
+        self.TWAVE_Module_PathC.add_step("Path C Dynamic Guard.setpoint", 
+                                         self.intent['flushVoltage'], 
+                                         opcodeCommand.WRITE, 
+                                         abs_time_ms) #Flush Path C/exit too
+
+    def wait(self, abs_time_ms):
+        '''
+        Wait_4_Ready step to occur prior to ion release at end of cycle.
+        '''
+        self.TWAVE_Module_PathC.add_step('TW3_NO_OP', 
+                                    0.0, 
+                                    opcodeCommand.WAIT, 
+                                    abs_time_ms) #Wait for ready on path OBA
+
+    def dead_time_calc(self):
+        '''
+        The ion mobiliy cycle time can be modeled as:
+            Fill + Trap + Release + OBA_Dead_Time = Separation + Flush + Separation_Dead_Time.
+
+        Either OBA_Dead_Time or Separation_Dead_Time will be non-zero based on the following equations:
+            OBA_Dead_Time > 0 when Separation + Flush > Fill + Trap + Release
+            Separation_Dead_Time > 0 when Fill + Trap + Release > Separation + Flush
+
+        When dead time is non-zero the following is how they will be calculated:
+            OBA_Dead_Time = Separation + Flush - (Fill + Trap + Release)
+            Separation_Dead_Time = Fill + Trap + Release - (Separation + Flush)
+        '''
+
+        sep_dt = max(0, self.intent['fill'] + self.intent['trap'] + self.intent['release'] - (self.intent['sipPeriod'] + self.flush_time))
+        oba_dt = max(0, self.intent['sipPeriod'] + self.flush_time - (self.intent['fill'] + self.intent['trap'] + self.intent['release']))
+        
+        return sep_dt, oba_dt
+    

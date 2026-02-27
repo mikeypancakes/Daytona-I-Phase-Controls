@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>834</width>
-    <height>599</height>
+    <width>1133</width>
+    <height>841</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -155,7 +155,7 @@
            <item>
             <widget class="QFrame" name="frame_8">
              <property name="sizePolicy">
-              <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
+              <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
                <horstretch>0</horstretch>
                <verstretch>0</verstretch>
               </sizepolicy>
@@ -506,7 +506,7 @@
                        </sizepolicy>
                       </property>
                       <property name="title">
-                       <string>HDC Path</string>
+                       <string>SLIM Path</string>
                       </property>
                       <property name="flat">
                        <bool>false</bool>
@@ -581,6 +581,45 @@
                       </layout>
                      </widget>
                     </item>
+                    <item>
+                     <widget class="QGroupBox" name="groupBox_14">
+                      <property name="sizePolicy">
+                       <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+                        <horstretch>0</horstretch>
+                        <verstretch>0</verstretch>
+                       </sizepolicy>
+                      </property>
+                      <property name="title">
+                       <string>ICD</string>
+                      </property>
+                      <property name="flat">
+                       <bool>false</bool>
+                      </property>
+                      <layout class="QVBoxLayout" name="verticalLayout_17">
+                       <property name="topMargin">
+                        <number>0</number>
+                       </property>
+                       <property name="bottomMargin">
+                        <number>0</number>
+                       </property>
+                       <item>
+                        <widget class="QComboBox" name="ICDComboBox"/>
+                       </item>
+                       <item>
+                        <widget class="QSplitter" name="splitter_9">
+                         <property name="orientation">
+                          <enum>Qt::Vertical</enum>
+                         </property>
+                         <widget class="QSplitter" name="splitter_10">
+                          <property name="orientation">
+                           <enum>Qt::Vertical</enum>
+                          </property>
+                         </widget>
+                        </widget>
+                       </item>
+                      </layout>
+                     </widget>
+                    </item>
                    </layout>
                   </widget>
                  </item>
@@ -593,7 +632,7 @@
            <item>
             <widget class="QFrame" name="frame_9">
              <property name="sizePolicy">
-              <sizepolicy hsizetype="MinimumExpanding" vsizetype="Maximum">
+              <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
                <horstretch>0</horstretch>
                <verstretch>0</verstretch>
               </sizepolicy>
@@ -787,7 +826,7 @@
       </widget>
       <widget class="QWidget" name="REST_Plotter">
        <attribute name="title">
-        <string>REST Live Plotter</string>
+        <string>Parameter Plotter</string>
        </attribute>
        <layout class="QHBoxLayout" name="horizontalLayout_4">
         <item>
@@ -1023,8 +1062,8 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>834</width>
-     <height>18</height>
+     <width>1133</width>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuVersion">

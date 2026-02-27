@@ -1,36 +1,39 @@
 Canonical Name,Board ID,Parameter
 CB_NO_OP,0,1000
 Digitizer Gate.DIO,0,150
-Switch Push One.setpoint,4,184
-Switch Gate Three.setpoint,4,183
-Switch Gate Three.control,4,189
 Entrance Traveling Wave.amplitude,4,151
-Entrance Traveling Wave.frequency,4,186
 Entrance Traveling Wave.direction,4,252
-Path A Gate.setpoint,4,181
+Entrance Traveling Wave.frequency,4,186
+Path A Dynamic Guard.setpoint,4,184
 Path A Gate.control,4,147
+Path A Gate.setpoint,4,181
 Path A Guard.setpoint,4,182
 Path A.direction,4,250
+Switch Gate Three.control,4,189
+Switch Gate Three.setpoint,4,183
+Switch Push One.setpoint,4,184
 TW1_NO_OP,4,1000
-Switch Push Two.setpoint,5,184
-Switch Gate Four.setpoint,5,183
-Switch Gate Four.control,5,189
-Path B Gate.setpoint,5,181
+Path B Dynamic Guard.setpoint,5,184
 Path B Gate.control,5,147
+Path B Gate.setpoint,5,181
 Path B Guard.setpoint,5,182
 Path B.direction,5,250
+Switch Gate Four.control,5,189
+Switch Gate Four.setpoint,5,183
+Switch Push Two.setpoint,5,184
 TW2_NO_OP,5,1000
-Switch Gate One.setpoint,6,181
-Switch Gate One.control,6,147
-Switch Gate Two.setpoint,6,183
-Switch Gate Two.control,6,189
-Static Guard.setpoint,6,184
-Waste Traveling Wave.amplitude,6,151
-Waste Traveling Wave.frequency,6,186
-Waste Traveling Wave.direction,6,252
-OBA Travelling Wave.amplitude,6,154
-OBA Travelling Wave.frequency,6,187
-OBA Travelling Wave.direction,6,254
-Fill Gate.setpoint,6,182
 Fill Gate.control,6,188
+Fill Gate.setpoint,6,182
+OBA Traveling Wave.amplitude,6,154
+OBA Traveling Wave.direction,6,254
+OBA Traveling Wave.frequency,6,187
+Path C Dynamic Guard.setpoint,6,184
+Static Guard.setpoint,6,184
+Switch Gate One.control,6,147
+Switch Gate One.setpoint,6,181
+Switch Gate Two.control,6,189
+Switch Gate Two.setpoint,6,183
 TW3_NO_OP,6,1000
+Waste Traveling Wave.amplitude,6,151
+Waste Traveling Wave.direction,6,252
+Waste Traveling Wave.frequency,6,186
