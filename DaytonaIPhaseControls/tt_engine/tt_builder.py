@@ -1,13 +1,15 @@
 from tt_engine.tt_dataclass import Module, Step, opcodeCommand
 import numpy as np
+import struct
 
 class DaytonaBase:
+
     def get_tt_dictionary(self) -> dict[str, list[Step]]:
         modules = [
             self.TWAVE_Module_PathA,
             self.TWAVE_Module_PathB,
             self.TWAVE_Module_PathC,
-            self.CONTROL_Module,
+            self.CONTROL_Module
         ]
         return {
             m.name: sorted(m.steps, key=lambda s: (s.abs_time_ms, s.priority))
@@ -22,8 +24,117 @@ class DaytonaBase:
             cleaned_tt_dict[module_name] = list(steps)
 
         return cleaned_tt_dict
+                
+    def loop_tt(self, abs_time_ms, module_list, num_loops):
+
+        loop_dict = {
+            "4" : 1.0,
+            "5" : 1.0,
+            "6" : 1.0,
+            "0" : 1.0
+        }
+
+        for module in module_list:
+                module.add_step(loop_dict[module.name],       
+                                     num_loops,
+                                     opcodeCommand.LOOP,
+                                     abs_time_ms,
+                                     priority = 3)
+
+    def end_tt(self, abs_time_ms, module_list, idle_twave_module):
+        '''
+        Add a end step opcode to the all modules contained in module_list. If module not present in list, module will be assigned no-op timing tables.
+        '''
+        module_no_op = {
+            "4" : 'TW1_NO_OP',
+            "5" : 'TW2_NO_OP',
+            "6" : 'TW3_NO_OP',
+            "0" : 'CB_NO_OP',
+        }
+
+        for module in module_list:
+            module.add_step(module_no_op[module.name],
+                                 0.0,
+                                 opcodeCommand.END,
+                                 0.0 if idle_twave_module.name == module.name else abs_time_ms,
+                                 priority = 4)
+
+    def build_profiles(self):
+
+        twr_dict = {}
+        twr_profiles = ['pathA_traveling_wave_profile', 'pathB_traveling_wave_profile']
+
+        for key in twr_profiles:
+            profile = self.intent.get(key)
+
+            if len(profile['ramps']) > 0:
+                
+                twr_dict[key] = {
+                    "ramp_profile": []
+                }
+
+                initial_step = self.intent[key]['initial_state']
+
+                twr_dict[key]['ramp_profile'].append({
+                    "time_ms" : 0.0,
+                    "frequency" : initial_step['frequency'],
+                    "amplitude" : initial_step['amplitude']
+                })
+
+                for ramp in self.intent[key]['ramps']:
+                    twr_dict[key]['ramp_profile'].append({
+                        "time_ms": ramp['time'],
+                        "frequency": ramp['state']['frequency'],
+                        "amplitude": ramp['state']['amplitude'],
+                    })
+
+        all_profiles = self.build_pathC_twr(twr_dict) #Will return None if no twave ramps are present, otherwise will return all three twave ramps.
+        self.build_twr_steps(all_profiles)
+
+        return all_profiles
+        
+    def build_pathC_twr(self, profiles):
+        pathC_dict = {}
+        for key in profiles.keys():
+            for ramp in profiles[key].keys():
+                ramp_steps = profiles[key][ramp]
+                if self.intent['HDCpath'] == "Both":
+                    pass              
+                else:
+                    if len(ramp_steps) > 1:
+                        pathC_dict[ramp] = ramp_steps
+                        profiles['pathC_traveling_wave_profile'] = pathC_dict
+                        return profiles
+    
+    def build_twr_steps(self, profiles):
+
+        amplitude_hex_values = []
+        amplitude_float_values = []
+        frequency_float_values = []
+        frequency_hex_values = []
+
+        for profile_key in profiles.keys():
+            print(profile_key)
+            for profile in range(0, len(profiles[profile_key]['ramp_profile'])):
+                if profile < len(profiles[profile_key]['ramp_profile']) - 2:
+                    print(profiles[profile_key]['ramp_profile'])
+                    ramp_start = list(profiles[profile_key]['ramp_profile'][profile].values())
+                    ramp_end = list(profiles[profile_key]['ramp_profile'][profile + 1].values())
+                    
+                    delta_t_ticks_hex = hex((int(ramp_end[0]) - int(ramp_start[0])) * 10)[2:].zfill(4)
+                    ramp_frequency_hex = hex(int((10**8)/(32*int(ramp_end[1]))))[2:].zfill(4)
+                    ramp_amplitude_hex = hex(int(ramp_end[2]/100 * 4095))[2:].zfill(4)
+
+                    amplitude_hex_values.append(ramp_amplitude_hex + delta_t_ticks_hex)
+                    frequency_hex_values.append(ramp_frequency_hex + delta_t_ticks_hex)
+                    amplitude_float_values.append(struct.unpack('>f', bytes.fromhex(ramp_amplitude_hex + delta_t_ticks_hex))[0])
+                    frequency_float_values.append(struct.unpack('>f', bytes.fromhex(ramp_frequency_hex + delta_t_ticks_hex))[0])
+
+        print(f"Amplitude Hex: {amplitude_hex_values}, Frequency Hex: {frequency_hex_values}, Amplitude Float: {amplitude_float_values}, Frequency Float: {frequency_float_values}")
+
 
 class Daytona_HDC_tt(DaytonaBase):
+
     def __init__(self, intent=None):
         self.TWAVE_Module_PathA = Module("4")
         self.TWAVE_Module_PathB = Module("5")
@@ -323,7 +434,7 @@ class Daytona_HDC_tt(DaytonaBase):
             twr_dict[key] = {
                 "ramp_profile": []
             }
-
+            print(self.intent[key]['ramps'])
             for ramp in self.intent[key]['ramps']:
                 twr_dict[key]['ramp_profile'].append({
                     "time_ms": ramp['time'],
@@ -357,45 +468,40 @@ class Daytona_SinglePath_tt(DaytonaBase):
         self.flush_time = 5.0
 
         self.pathSelection_dict = {
-            'Path A' : [self.TWAVE_Module_PathA, 'Path A Gate.control', 'Path A Dynamic Guard.setpoint'], #Gate mapping based on user path selection
-            'Path B' : [self.TWAVE_Module_PathB, 'Path B Gate.control', 'Path A Dynamic Guard.setpoint']
+            'Path A' : [self.TWAVE_Module_PathA, 'Path A Gate.control', 'Path A Dynamic Guard.setpoint', 'TW1_NO_OP'], #Gate mapping based on user path selection
+            'Path B' : [self.TWAVE_Module_PathB, 'Path B Gate.control', 'Path A Dynamic Guard.setpoint', 'TW2_NO_OP']
         }
 
         #Timing Table Saugage Maker
 
-        sep_dt, oba_dt = self.dead_time_calc()
+        sep_dt, oba_dt = self.dead_time_calc() #find the dead time to be used to accumulate ions in parallel with separation.
+        idle_module = self.TWAVE_Module_PathA if self.intent['HDCpath'] == 'Path B' else self.TWAVE_Module_PathB
 
         self.init_steps(abs_time_ms=0.0)
         self.fill(abs_time_ms=self.intent['release'] + oba_dt)
         self.trap(abs_time_ms=self.intent['release'] + self.intent['fill'] + oba_dt)
         self.release(abs_time_ms=0.0) #i know, its confusing, but we start with release
-        #self.stall(abs_time_ms=self.intent['sipPeriod'] - self.intent['stallDuration']) I dont think were going to stall on single path...
         self.flush(abs_time_ms=self.intent['sipPeriod'] + sep_dt - self.flush_time)
-        self.wait(abs_time_ms=self.intent['release'] + self.intent['fill'] + oba_dt + self.intent['trap'])
-        #self.build_twrs(SIP_period=self.intent['sipPeriod']) Not ready yet.
+        self.loop(abs_time_ms=self.intent['sipPeriod'])
+        self.end(abs_time_ms=self.intent['sipPeriod'], idle_twave_module = idle_module) 
+        self.build_profiles()
 
     def init_steps(self, abs_time_ms):
 
         #Init Path A
-        self.TWAVE_Module_PathA.add_step("Path A Dynamic Guard.setpoint", 
+        self.pathSelection_dict[self.intent['HDCpath']][0].add_step(self.pathSelection_dict[self.intent['HDCpath']][2], 
                                          abs(self.intent['flushVoltage']), 
                                          opcodeCommand.WRITE, 
                                          abs_time_ms, priority=-1)
-        self.TWAVE_Module_PathA.add_step("Path A Gate.control", 
+        self.pathSelection_dict[self.intent['HDCpath']][0].add_step(self.pathSelection_dict[self.intent['HDCpath']][1], 
                                          0.0, #Close gate
                                          opcodeCommand.WRITE, 
                                          abs_time_ms, priority=-1)
-        self.TWAVE_Module_PathA.add_step("TW1_NO_OP",
+        self.pathSelection_dict[self.intent['HDCpath']][0].add_step(self.pathSelection_dict[self.intent['HDCpath']][3],
                                          0.0, 
                                          opcodeCommand.WAIT, #WAIT_4_READY to start release sequence on receipt of sync pulse
                                          abs_time_ms, priority=-1)
 
-        #Init Path B
-        self.TWAVE_Module_PathB.add_step("Path B Dynamic Guard.setpoint", 
-                                         abs(self.intent['flushVoltage']),
-                                         opcodeCommand.WRITE, 
-                                         abs_time_ms, priority=-1)
-        
         #Init OBA+Path C
         self.TWAVE_Module_PathC.add_step("Path C Dynamic Guard.setpoint", 
                                          abs(self.intent['flushVoltage']), 
@@ -451,7 +557,7 @@ class Daytona_SinglePath_tt(DaytonaBase):
 
         Second trap is offset from the intitial release by the fill time + trap time + release time.
         '''
-        #Path A Trap
+
         self.TWAVE_Module_PathC.add_step("Fill Gate.control", #Close fill gate, begin trap
                                         0.0, 
                                         opcodeCommand.WRITE, 
@@ -520,6 +626,14 @@ class Daytona_SinglePath_tt(DaytonaBase):
                                     opcodeCommand.WAIT, 
                                     abs_time_ms) #Wait for ready on path OBA
 
+    def end(self, abs_time_ms, idle_twave_module):
+        single_path_module_list = [self.CONTROL_Module, self.TWAVE_Module_PathA, self.TWAVE_Module_PathB, self.TWAVE_Module_PathC]
+        self.end_tt(abs_time_ms, single_path_module_list, idle_twave_module)
+
+    def loop(self, abs_time_ms, num_loops = 16777215):
+        single_path_module_list = [self.CONTROL_Module, self.pathSelection_dict[self.intent['HDCpath']][0], self.TWAVE_Module_PathC]
+        self.loop_tt(abs_time_ms, single_path_module_list, num_loops)
+
     def dead_time_calc(self):
         '''
         The ion mobiliy cycle time can be modeled as:
@@ -535,7 +649,7 @@ class Daytona_SinglePath_tt(DaytonaBase):
         '''
 
         sep_dt = max(0, self.intent['fill'] + self.intent['trap'] + self.intent['release'] - (self.intent['sipPeriod'] + self.flush_time))
-        oba_dt = max(0, self.intent['sipPeriod'] + self.flush_time - (self.intent['fill'] + self.intent['trap'] + self.intent['release']))
+        oba_dt = max(0, self.intent['sipPeriod'] - (self.intent['fill'] + self.intent['trap'] + self.intent['release'])) #Separtion Time + Flush Time = SIP Period
         
         return sep_dt, oba_dt
     

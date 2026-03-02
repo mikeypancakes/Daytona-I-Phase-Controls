@@ -12,13 +12,14 @@ from tt_engine.tt_builder import Daytona_HDC_tt, Daytona_SinglePath_tt
 from scripts.fpga_map import SC, TW
 
 class DaytonaGUI(QtWidgets.QMainWindow):
+
     def __init__(self):
         super(DaytonaGUI, self).__init__()
         ui_path = os.path.join(os.path.dirname(__file__), 'gui.ui')
         uic.loadUi(ui_path, self)
 
-        version = "v0.1"
-        title = "Daytona I-Phase Controls"
+        version = "v0.2"
+        title = "Daytona I-Phase Controls (PreRelease)"
         self.menuVersion.setTitle(version)
         self.setWindowTitle(title)
 
@@ -39,6 +40,10 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         self.putsetpoints_btn.clicked.connect(lambda: self.post_setpoints(self.get_ics_channels(self.parameter_table)))
         self.upload_method_btn.clicked.connect(self.load_csv_file)
         self.generateTT_btn.clicked.connect(self.generate_tt)
+        self.addRow_TWRA_btn.clicked.connect(lambda: self.add_remove_row(self.pathA_tbl, add = True))
+        self.addRow_TWRB_btn.clicked.connect(lambda: self.add_remove_row(self.pathB_tbl, add = True))
+        self.removeRow_TWRA_btn.clicked.connect(lambda: self.add_remove_row(self.pathA_tbl))
+        self.removeRow_TWRB_btn.clicked.connect(lambda: self.add_remove_row(self.pathB_tbl))
 
         self.twr_headers = ['Time (ms)', 'Frequency (Hz)', 'Amplitude (V)']
         self.pathA_tbl.setHorizontalHeaderLabels(self.twr_headers)
@@ -54,7 +59,6 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         self.find_methods()
         self.update_method_table(os.path.join(os.path.dirname(__file__), "methods", "init", "init_method_daytona.csv"))
         
-
     def connect_to_ICS(self):
         '''
         Connect to ICS and retrieve the version information to confirm connection.
@@ -251,7 +255,6 @@ class DaytonaGUI(QtWidgets.QMainWindow):
             self.input_trap_params_freq.setText(str(intent_data["trapFrequency"]))
             self.input_release_params_amp.setText(str(intent_data["releaseAmp"]))
             self.input_release_params_freq.setText(str(intent_data["releaseFrequency"]))
-            self.wait4ready_box.setChecked(intent_data["wait_for_ready"])
             self.pathComboBox.setCurrentIndex(self.HDC_paths.index(intent_data["HDCpath"])) if intent_data["HDCpath"] in self.HDC_paths else 0
             self.JHpathComboBox.setCurrentIndex(self.JH_paths.index(intent_data["JHpath"])) if intent_data["JHpath"] in self.JH_paths else 0   
             self.update_twr_gui_tables(intent_data)
@@ -259,7 +262,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         except Exception as e:
             print(f"Error loading intent file: {e}")
 
-    def build_intent(self):
+    def build_intent(self, twr_list):
         '''
         Build an intent dictionary from the current GUI input values.
         This function gathers all relevant parameters from the GUI and constructs a dictionary that represents the intent for the experiment.
@@ -277,46 +280,19 @@ class DaytonaGUI(QtWidgets.QMainWindow):
             "trapFrequency": float(self.input_trap_params_freq.text()),
             "releaseAmp": float(self.input_release_params_amp.text()),
             "releaseFrequency": float(self.input_release_params_freq.text()),
-            "wait_for_ready": self.wait4ready_box.isChecked(),
             "HDCpath": self.pathComboBox.currentText(),
             "JHpath": self.JHpathComboBox.currentText(),
-            "pathA_traveling_wave_profile": {
-                "initial_state": {
-                    "frequency": float(self.pathA_tbl.item(0, 1).text()),
-                    "amplitude": float(self.pathA_tbl.item(0, 2).text())
-                },
-                "ramps": [
-                    {
-                        "time": float(self.pathA_tbl.item(row, 0).text()),
-                        "state": {
-                            "frequency": float(self.pathA_tbl.item(row, 1).text()),
-                            "amplitude": float(self.pathA_tbl.item(row, 2).text())
-                        }
-                    }
-                    for row in range(self.pathA_tbl.rowCount())
-                ]
-            },
-            "pathB_traveling_wave_profile": {
-                "initial_state": {
-                    "frequency": float(self.pathB_tbl.item(0, 1).text()),
-                    "amplitude": float(self.pathB_tbl.item(0, 2).text())
-                },
-                "ramps": [
-                    {
-                        "time": float(self.pathB_tbl.item(row, 0).text()),
-                        "state": {
-                            "frequency": float(self.pathB_tbl.item(row, 1).text()),
-                            "amplitude": float(self.pathB_tbl.item(row, 2).text())
-                        }
-                    }
-                    for row in range(self.pathB_tbl.rowCount())
-                ]
             }
-        }
+        
+        for twr in twr_list:
+            key = list(twr.keys())[0]
+            intent[key] = twr[key]
+
         return intent
     
     def generate_tt(self):
-        intent = self.build_intent()
+        twr_dictionarys_list = [self.get_twrs_from_tables(self.pathA_tbl), self.get_twrs_from_tables(self.pathB_tbl, pathA=False)]
+        intent = self.build_intent(twr_dictionarys_list)
         tt = Daytona_HDC_tt(intent=intent) if intent['HDCpath'] == 'Both' else Daytona_SinglePath_tt(intent=intent)
         tt_dictionary = tt.get_tts()
         tt_dict = {}
@@ -326,8 +302,8 @@ class DaytonaGUI(QtWidgets.QMainWindow):
             for item in tt_dictionary[module]:
                 step_info.append({
                     "opcode": item.opcode.value,
-                    "ticks": int((float(item.abs_time_ms) - last_time) * 10.0), #to clock ticks
-                    "address": self.parameter_mapping(item.canonical_name),
+                    "ticks": int(round((round(float(item.abs_time_ms), 1) - last_time) * 10.0)), #to clock ticks
+                    "address": int(item.canonical_name) if item.opcode.value == "C0" else self.parameter_mapping(item.canonical_name),
                     "setpoint": item.setpoint
                 })
                 last_time = float(item.abs_time_ms)
@@ -378,3 +354,46 @@ class DaytonaGUI(QtWidgets.QMainWindow):
                 table.setItem(i+1, 0, QTableWidgetItem(str(time)))
                 table.setItem(i+1, 1, QTableWidgetItem(str(frequency)))
                 table.setItem(i+1, 2, QTableWidgetItem(str(amplitude)))
+
+    def add_remove_row(self, twr_table, add = False):
+        if add:
+            row = twr_table.rowCount()
+            twr_table.insertRow(row)
+            for col in range(twr_table.columnCount()):
+                twr_table.setItem(row, col, QTableWidgetItem(""))
+        else:
+            row = twr_table.currentRow()
+            if row >= 0:
+                twr_table.removeRow(row)
+
+    def get_twrs_from_tables(self, table_input, pathA=True):
+            
+            path_key = "pathA_traveling_wave_profile" if pathA else "pathB_traveling_wave_profile"
+
+            def get_cell(row, col):
+                item = table_input.item(row, col)
+                return float(item.text()) if item and item.text() not in ("", "initial") else 0.0
+
+            # Row 0 = initial state
+            initial_state = {
+                "frequency": get_cell(0, 1),
+                "amplitude": get_cell(0, 2)
+            }
+
+            # Remaining rows = ramps
+            ramps = []
+            for row in range(1, table_input.rowCount()):
+                ramps.append({
+                    "time": get_cell(row, 0),
+                    "state": {
+                        "frequency": get_cell(row, 1),
+                        "amplitude": get_cell(row, 2)
+                    }
+                })
+
+            return {
+                path_key: {
+                    "initial_state": initial_state,
+                    "ramps": ramps
+                }
+            }   
