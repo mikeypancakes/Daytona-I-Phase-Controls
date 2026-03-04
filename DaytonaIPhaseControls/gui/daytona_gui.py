@@ -4,6 +4,7 @@ import json
 from urllib import response
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtWidgets import QMainWindow, QMessageBox, QApplication, QTableWidgetItem, QFileDialog, QWidget
+from PyQt5.QtCore import QTimer
 import pyqtgraph as pg
 from gui.tt_popup import ttPopup
 from ics_client.client import ICS_Client
@@ -35,7 +36,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
 
         #Wire up buttons to functions
         self.connect_btn.clicked.connect(self.connect_to_ICS)
-        self.getreadbacks_btn.clicked.connect(lambda: self.get_readbacks(self.get_ics_channels(self.parameter_table)))
+        self.getreadbacks_btn.clicked.connect(lambda: self.get_readbacks(self.get_ics_channels(self.parameter_table), table_widget=self.parameter_table))
         self.method_combo_box.currentTextChanged.connect(self.on_method_dropdown_change)
         self.putsetpoints_btn.clicked.connect(lambda: self.post_setpoints(self.get_ics_channels(self.parameter_table)))
         self.upload_method_btn.clicked.connect(self.load_csv_file)
@@ -44,6 +45,9 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         self.addRow_TWRB_btn.clicked.connect(lambda: self.add_remove_row(self.pathB_tbl, add = True))
         self.removeRow_TWRA_btn.clicked.connect(lambda: self.add_remove_row(self.pathA_tbl))
         self.removeRow_TWRB_btn.clicked.connect(lambda: self.add_remove_row(self.pathB_tbl))
+        self.add_row_btn.clicked.connect(self.add_plotter_tbl_row)
+        self.remove_row_btn.clicked.connect(self.rmv_plotter_tbl_row)
+        self.begin_plot_btn.clicked.connect(self.start_polling)
 
         self.twr_headers = ['Time (ms)', 'Frequency (Hz)', 'Amplitude (V)']
         self.pathA_tbl.setHorizontalHeaderLabels(self.twr_headers)
@@ -52,13 +56,79 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         self.plotting_widget.setBackground('w')
         self.plotting_widget.clear()
         self.plotting_widget.addLegend()
+        self.curve = self.plotting_widget.plot(pen=pg.mkPen(color='b', width=2))
+        self.readback_data_series = [] 
+        self.readback_data = []
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_readbacks)
 
         self.status_label.setText("Disconnected")
         self.status_label.setStyleSheet("color: red; font-weight: bold;")
 
         self.find_methods()
         self.update_method_table(os.path.join(os.path.dirname(__file__), "methods", "init", "init_method_daytona.csv"))
-        
+
+    def add_plotter_tbl_row(self):
+        row_position = self.params_table.rowCount()
+        self.params_table.insertRow(row_position)
+
+    def rmv_plotter_tbl_row(self):
+        current_row = self.params_table.currentRow()
+        if current_row >= 0:
+            self.params_table.removeRow(current_row)
+
+    def start_polling(self):
+        interval_str = self.interval_input.text().strip()
+        try:
+            interval = int(interval_str)
+            if interval <= 0:
+                raise ValueError
+        except ValueError:
+            self.show_error_popup("Invalid interval. Enter a positive number.")
+            return
+
+        self.update_readbacks() 
+        self.timer.start(interval * 1000) 
+
+    def show_error_popup(self, error_code):
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Critical)
+        msg.setWindowTitle("Token Retrieval Failed")
+        msg.setText(f"Failed to get token.\nError code: {error_code}")
+        msg.exec_()
+
+    def update_readbacks(self):
+        address = self.address_input.text()
+        self.get_readbacks(self.get_ics_channels(self.params_table), self.params_table)
+
+
+    def update_plot(self, series_index, new_value):
+        series = self.readback_data_series[series_index]
+        series.append(new_value)
+        if len(series) > self.max_points:
+            series.pop(0)
+        self.curves[series_index].setData(series)
+
+    def stop_plotting(self):
+        self.timer.stop()
+        self.status_label.setText("Disconnected")
+        self.status_label.setStyleSheet("color: red; font-weight: bold;")
+
+
+    def get_table_data(self):
+        table_data = []
+        row_count = self.params_table.rowCount()
+        col_count = self.params_table.columnCount()
+
+        for row in range(row_count):
+            row_data = []
+            for col in range(col_count - 1): 
+                item = self.params_table.item(row, col)
+                row_data.append(item.text() if item else "")
+            table_data.append(row_data)
+
+        return table_data
+
     def connect_to_ICS(self):
         '''
         Connect to ICS and retrieve the version information to confirm connection.
@@ -93,7 +163,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         method_names = [os.path.splitext(f)[0] for f in method_files]
         self.method_combo_box.clear()
         self.method_combo_box.addItems(method_names)
-
+        
     def on_method_dropdown_change(self, method_name):
         '''
         Handle changes in the method dropdown selection.
@@ -107,6 +177,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         '''
         Update the parameter table in the GUI with the provided parameters.
         Clears existing entries and populates the table with new parameter data.
+        Adds an extra "Readback" column at the end.
         '''
         self.parameter_table.setRowCount(0)  # Clear existing rows
 
@@ -114,10 +185,14 @@ class DaytonaGUI(QtWidgets.QMainWindow):
             reader = csv.reader(csvfile)
             headers = next(reader)  # First row = column headers
 
-            # Set column count and headers
+            # Step 1: Add extra header for readbacks
+            headers.append("Readback")
+
+            # Step 2: Set column count and headers
             self.parameter_table.setColumnCount(len(headers))
             self.parameter_table.setHorizontalHeaderLabels(headers)
 
+            # Step 3: Populate the table
             for row_data in reader:
                 row_position = self.parameter_table.rowCount()
                 self.parameter_table.insertRow(row_position)
@@ -126,43 +201,57 @@ class DaytonaGUI(QtWidgets.QMainWindow):
                     item = QtWidgets.QTableWidgetItem(cell_value)
                     self.parameter_table.setItem(row_position, column, item)
 
+                # Step 4: Add empty QTableWidgetItem for the Readback column
+                readback_column_index = len(headers) - 1
+                self.parameter_table.setItem(
+                    row_position,
+                    readback_column_index,
+                    QtWidgets.QTableWidgetItem("")  # Empty initially
+                )
+
     def get_ics_channels(self, table_widget):
         '''
         Extract canonical names from the parameter table and return them as a list.
-        Iterates through the rows of the table and collects the canonical names from the first column.
+        Iterates through the rows of the table and collects the canonical names from the board_id, parameter, and setpoint columns.
         '''
         channel_result = []
+
         for row in range(table_widget.rowCount()):
-            board_id = table_widget.item(row, 1)  # Second column = board_id
-            parameter = table_widget.item(row, 2)  # Third column = parameter
-            setpoint = table_widget.item(row, 3)  # Fourth column = setpoint value
-            if board_id:
-                channel_array = (f"@{board_id.text()}.{parameter.text()}", setpoint.text())
+            board_id_item = table_widget.item(row, 1)  # Second column = board_id
+            parameter_item = table_widget.item(row, 2)  # Third column = parameter
+            setpoint_item = table_widget.item(row, 3)  # Fourth column = setpoint value
+
+            if board_id_item and parameter_item:  # Need both to form canonical name
+                board_id_text = board_id_item.text() if board_id_item.text() else ''
+                parameter_text = parameter_item.text() if parameter_item.text() else ''
+                setpoint_text = setpoint_item.text() if setpoint_item else ''  # Safely handle None
+
+                channel_array = (f"@{board_id_text}.{parameter_text}", setpoint_text)
                 channel_result.append(channel_array)
+
         return channel_result
-    
+        
     def handle_readback_response(self, response, table_widget=None):
-        print(table_widget.rowCount())   
+
         if isinstance(response, Exception):
             print(f"Error retrieving readbacks: {response}")
             return None
-        else:
-            print(f"Readback response: {response}")
-            # Process the response as needed (e.g., update the GUI, plot data, etc.)
-            for row in range(table_widget.rowCount()):
-                dict_response = response[row]
-                item = table_widget.item(row, 4)  # Fifth column = readback value
-                if item:
-                    item.setText(str(dict_response.get("value", "N/A")))
-            return response    
 
-    def get_readbacks(self, data):
-        print(f"Getting readbacks for channels: {data}")
+        values = [item["value"] for item in response]
+
+        if table_widget.rowCount() < len(values):
+            table_widget.setRowCount(len(values))
+
+        for row, value in enumerate(values):
+            table_widget.setItem(row, 4 if table_widget == self.parameter_table else 3, QTableWidgetItem(str(value)))
+
+        return response
+
+    def get_readbacks(self, data, table_widget):
 
         readback_list = []
         for paramter, setpoint in data:
             readback_list.append(paramter)
-            print(f"Parameter: {paramter}, Setpoint: {setpoint}")
 
         # Keep the worker alive
         self.worker = RequestWorker(
@@ -173,7 +262,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
             data=";".join(readback_list)
         )
 
-        self.worker.finished.connect(lambda response: self.handle_readback_response(response, self.parameter_table))
+        self.worker.finished.connect(lambda response: self.handle_readback_response(response, table_widget))
         self.worker.finished.connect(self.worker.deleteLater)  # safely delete after done
         self.worker.start()
     

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1086</width>
-    <height>904</height>
+    <width>1100</width>
+    <height>876</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -705,7 +705,7 @@
                        <number>4</number>
                       </property>
                       <property name="columnCount">
-                       <number>3</number>
+                       <number>5</number>
                       </property>
                       <attribute name="horizontalHeaderCascadingSectionResizes">
                        <bool>true</bool>
@@ -732,6 +732,8 @@
                       <row/>
                       <row/>
                       <row/>
+                      <column/>
+                      <column/>
                       <column/>
                       <column/>
                       <column/>
@@ -805,7 +807,7 @@
                        <number>4</number>
                       </property>
                       <property name="columnCount">
-                       <number>3</number>
+                       <number>5</number>
                       </property>
                       <attribute name="horizontalHeaderCascadingSectionResizes">
                        <bool>true</bool>
@@ -832,6 +834,8 @@
                       <row/>
                       <row/>
                       <row/>
+                      <column/>
+                      <column/>
                       <column/>
                       <column/>
                       <column/>
@@ -1210,7 +1214,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1086</width>
+     <width>1100</width>
      <height>21</height>
     </rect>
    </property>

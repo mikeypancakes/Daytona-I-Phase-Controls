@@ -4,9 +4,8 @@ from ics_client.client import ICS_Client
 from gui.daytona_gui import DaytonaGUI
 
 #Daytona I-Phase Controls
-#Developed by Mikey Slem (aka Mikey Pancakes, aka Dirty Mike, aka Michael Slemko)
 #2026
-#Date last updated: 01MAR2026
+#Date last updated: 03MAR2026 M.S.
 
 def main():
     app = QApplication([])
