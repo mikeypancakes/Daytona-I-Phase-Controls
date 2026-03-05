@@ -19,7 +19,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         ui_path = os.path.join(os.path.dirname(__file__), 'gui.ui')
         uic.loadUi(ui_path, self)
 
-        version = "v0.2"
+        version = "v0.3"
         title = "Daytona I-Phase Controls (PreRelease)"
         self.menuVersion.setTitle(version)
         self.setWindowTitle(title)
@@ -140,7 +140,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         #Get the version of the electronics to confirm connection
         try:
             self.ics_client = ICS_Client(base_url=self.hostAddress)
-            response = self.ics_client.send_request('api/ics/instrument/version/', 
+            response = self.ics_client.send_request('/api/ics/instrument/initialization/', 
                                                     method='GET',
                                                     port=8001)
             if response:
