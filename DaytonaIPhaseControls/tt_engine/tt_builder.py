@@ -1,6 +1,7 @@
 from tt_engine.tt_dataclass import Module, Step, opcodeCommand
 import numpy as np
 import struct
+from scripts.fpga_map import TwaveAddresses
 
 class DaytonaBase:
 
@@ -28,9 +29,9 @@ class DaytonaBase:
     def loop_tt(self, abs_time_ms, module_list, num_loops):
 
         loop_dict = {
-            "4" : 1.0,
-            "5" : 1.0,
-            "6" : 1.0,
+            "4" : 2.0,
+            "5" : 2.0,
+            "6" : 2.0,
             "0" : 1.0
         }
 
@@ -108,30 +109,60 @@ class DaytonaBase:
     
     def build_twr_steps(self, profiles):
 
+        module_dict = {'pathA_traveling_wave_profile' : [self.TWAVE_Module_PathA, "Path A Traveling Wave.amplitude", "Path A Traveling Wave.frequency"],
+                       'pathB_traveling_wave_profile' : [self.TWAVE_Module_PathB, "Path B Traveling Wave.amplitude", "Path B Traveling Wave.frequency"],
+                       'pathC_traveling_wave_profile' : [self.TWAVE_Module_PathC, "Path C Traveling Wave.amplitude", "Path C Traveling Wave.frequency"]}
+
         amplitude_hex_values = []
         amplitude_float_values = []
         frequency_float_values = []
         frequency_hex_values = []
+        ramp_steps = []
 
         for profile_key in profiles.keys():
-            print(profile_key)
             for profile in range(0, len(profiles[profile_key]['ramp_profile'])):
-                if profile < len(profiles[profile_key]['ramp_profile']) - 2:
-                    print(profiles[profile_key]['ramp_profile'])
+                if profile < len(profiles[profile_key]['ramp_profile']) - 1:
                     ramp_start = list(profiles[profile_key]['ramp_profile'][profile].values())
                     ramp_end = list(profiles[profile_key]['ramp_profile'][profile + 1].values())
-                    
+                    ramp_steps.insert(profile, ramp_start)
                     delta_t_ticks_hex = hex((int(ramp_end[0]) - int(ramp_start[0])) * 10)[2:].zfill(4)
                     ramp_frequency_hex = hex(int((10**8)/(32*int(ramp_end[1]))))[2:].zfill(4)
                     ramp_amplitude_hex = hex(int(ramp_end[2]/100 * 4095))[2:].zfill(4)
+                    amplitude_hex_values.insert(profile,(ramp_amplitude_hex + delta_t_ticks_hex))
+                    frequency_hex_values.insert(profile,(ramp_frequency_hex + delta_t_ticks_hex))
+                    amplitude_float_values.insert(profile,(struct.unpack('>f', bytes.fromhex(ramp_amplitude_hex + delta_t_ticks_hex))[0]))
+                    frequency_float_values.insert(profile,(struct.unpack('>f', bytes.fromhex(ramp_frequency_hex + delta_t_ticks_hex))[0]))
 
-                    amplitude_hex_values.append(ramp_amplitude_hex + delta_t_ticks_hex)
-                    frequency_hex_values.append(ramp_frequency_hex + delta_t_ticks_hex)
-                    amplitude_float_values.append(struct.unpack('>f', bytes.fromhex(ramp_amplitude_hex + delta_t_ticks_hex))[0])
-                    frequency_float_values.append(struct.unpack('>f', bytes.fromhex(ramp_frequency_hex + delta_t_ticks_hex))[0])
+            module = module_dict[profile_key][0]
+            for line, ramp in enumerate(ramp_steps):
+                    
+                    module.add_step(hex(TwaveAddresses.TWAVE_INITIAL_FREQUENCY_ADDRESS),
+                                    ramp[1], #Initial frequency
+                                    opcodeCommand.WRITE,
+                                    ramp[0]) #absolute time
+                    
+                    module.add_step(hex(TwaveAddresses.TWAVE_INITIAL_AMPLITUDE_ADDRESS),
+                                    ramp[2], #Initial amplitude
+                                    opcodeCommand.WRITE,
+                                    ramp[0]) #absolute time
+                    
+                    module.add_step(hex(TwaveAddresses.TWAVE_RAMP_END_FREQUENCY),
+                                    frequency_float_values[line], #Ramp Frequency
+                                    opcodeCommand.WRITE,
+                                    ramp[0]) #absolute time
+                    
+                    module.add_step(hex(TwaveAddresses.TWAVE_INITIAL_AMPLITUDE_ADDRESS),
+                                    amplitude_float_values[line], #Ramplitude
+                                    opcodeCommand.WRITE,
+                                    ramp[0]) #absolute time
 
-        print(f"Amplitude Hex: {amplitude_hex_values}, Frequency Hex: {frequency_hex_values}, Amplitude Float: {amplitude_float_values}, Frequency Float: {frequency_float_values}")
-
+            #print(f"Amplitude Hex: {amplitude_hex_values}, Frequency Hex: {frequency_hex_values}, Amplitude Float: {amplitude_float_values}, Frequency Float: {frequency_float_values}, Ramp Steps: {ramp_steps}")
+    
+            amplitude_hex_values.clear()
+            amplitude_float_values.clear()
+            frequency_float_values.clear()
+            frequency_hex_values.clear()
+            ramp_steps.clear()
 
 class Daytona_HDC_tt(DaytonaBase):
 
@@ -465,7 +496,6 @@ class Daytona_SinglePath_tt(DaytonaBase):
         self.TWAVE_Module_PathC = Module("6")
         self.CONTROL_Module = Module("0")
         self.intent = intent
-        self.flush_time = 5.0
 
         self.pathSelection_dict = {
             'Path A' : [self.TWAVE_Module_PathA, 'Path A Gate.control', 'Path A Dynamic Guard.setpoint', 'TW1_NO_OP'], #Gate mapping based on user path selection
@@ -480,11 +510,11 @@ class Daytona_SinglePath_tt(DaytonaBase):
         self.init_steps(abs_time_ms=0.0)
         self.fill(abs_time_ms=self.intent['release'] + oba_dt)
         self.trap(abs_time_ms=self.intent['release'] + self.intent['fill'] + oba_dt)
-        self.release(abs_time_ms=0.0) #i know, its confusing, but we start with release
-        self.flush(abs_time_ms=self.intent['sipPeriod'] + sep_dt - self.flush_time)
+        self.release(abs_time_ms=0.0)
+        self.flush(abs_time_ms=self.intent['sipPeriod'] + sep_dt - self.intent['flushDuration'])
         self.loop(abs_time_ms=self.intent['sipPeriod'])
         self.end(abs_time_ms=self.intent['sipPeriod'], idle_twave_module = idle_module) 
-        self.build_profiles()
+        self.build_profiles() if self.intent['pathA_traveling_wave_profile']['ramps'] or self.intent['pathB_traveling_wave_profile']['ramps'] else None
 
     def init_steps(self, abs_time_ms):
 
@@ -508,10 +538,15 @@ class Daytona_SinglePath_tt(DaytonaBase):
                                          opcodeCommand.WRITE, 
                                          abs_time_ms, priority=-1)
         
+        self.TWAVE_Module_PathC.add_step("Fill Gate.control", #Close fill gate
+                                         0.0, 
+                                         opcodeCommand.WRITE, 
+                                         abs_time_ms, priority=-1)
+        
         self.TWAVE_Module_PathC.add_step("TW3_NO_OP",
                                      0.0, 
                                      opcodeCommand.WAIT, #WAIT_4_SYNC to delay the opening of fill gate
-                                     abs_time_ms)
+                                     abs_time_ms, priority=-1)
         
         #Init Control Board
         self.CONTROL_Module.add_step("Digitizer Gate.DIO",
@@ -585,22 +620,42 @@ class Daytona_SinglePath_tt(DaytonaBase):
                                          abs(self.intent['flushVoltage']), #End flush
                                          opcodeCommand.WRITE, 
                                          abs_time_ms)
+        
+        self.TWAVE_Module_PathC.add_step("Path C Dynamic Guard.setpoint", 
+                                        abs(self.intent['flushVoltage']), #End flush
+                                        opcodeCommand.WRITE, 
+                                        abs_time_ms)
+        
         self.pathSelection_dict[self.intent['HDCpath']][0].add_step("OBA Traveling Wave.amplitude", #Close fill gate, begin trap
                                          self.intent['releaseAmp'], 
                                          opcodeCommand.WRITE, 
                                          abs_time_ms)
+        
         self.pathSelection_dict[self.intent['HDCpath']][0].add_step("OBA Traveling Wave.frequency", #Close fill gate, begin trap
                                          self.intent['releaseFrequency'], 
                                          opcodeCommand.WRITE, 
                                          abs_time_ms)
-        self.pathSelection_dict[self.intent['HDCpath']][0].add_step("OBA Traveling Wave.direction",
+        
+        self.TWAVE_Module_PathC.add_step("OBA Traveling Wave.direction",
                                          1.0 if self.intent['HDCpath'] == 'Path A' else 0.0, #Set FWD to go down path A
                                          opcodeCommand.WRITE, 
                                          abs_time_ms)
+        
         self.pathSelection_dict[self.intent['HDCpath']][0].add_step(self.pathSelection_dict[self.intent['HDCpath']][1], 
                                          1.0, #Open gate
                                          opcodeCommand.WRITE, 
                                          abs_time_ms)
+        
+        #End release:
+        self.pathSelection_dict[self.intent['HDCpath']][0].add_step(self.pathSelection_dict[self.intent['HDCpath']][1], 
+                                    0.0, #close gate
+                                    opcodeCommand.WRITE, 
+                                    abs_time_ms + self.intent['release'])
+        
+        self.CONTROL_Module.add_step("Digitizer Gate.DIO",
+                                     1.0, 
+                                     opcodeCommand.WRITE, #Digitizer high on ion release
+                                     abs_time_ms)
         
     def flush(self, abs_time_ms):
         '''
@@ -616,6 +671,11 @@ class Daytona_SinglePath_tt(DaytonaBase):
                                          self.intent['flushVoltage'], 
                                          opcodeCommand.WRITE, 
                                          abs_time_ms) #Flush Path C/exit too
+        
+        self.CONTROL_Module.add_step("Digitizer Gate.DIO",
+                                     0.0, 
+                                     opcodeCommand.WRITE, #Digitizer high on ion release
+                                     abs_time_ms)
 
     def wait(self, abs_time_ms):
         '''
@@ -648,7 +708,7 @@ class Daytona_SinglePath_tt(DaytonaBase):
             Separation_Dead_Time = Fill + Trap + Release - (Separation + Flush)
         '''
 
-        sep_dt = max(0, self.intent['fill'] + self.intent['trap'] + self.intent['release'] - (self.intent['sipPeriod'] + self.flush_time))
+        sep_dt = max(0, self.intent['fill'] + self.intent['trap'] + self.intent['release'] - (self.intent['sipPeriod'] + self.intent['flushDuration']))
         oba_dt = max(0, self.intent['sipPeriod'] - (self.intent['fill'] + self.intent['trap'] + self.intent['release'])) #Separtion Time + Flush Time = SIP Period
         
         return sep_dt, oba_dt

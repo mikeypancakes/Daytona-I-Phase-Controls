@@ -19,7 +19,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         ui_path = os.path.join(os.path.dirname(__file__), 'gui.ui')
         uic.loadUi(ui_path, self)
 
-        version = "v0.3"
+        version = "v0.4"
         title = "Daytona I-Phase Controls (PreRelease)"
         self.menuVersion.setTitle(version)
         self.setWindowTitle(title)
@@ -338,6 +338,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
             self.input_release_time.setText(str(intent_data["release"]))
             self.input_trap_time.setText(str(intent_data["trap"]))
             self.input_flush_voltage.setText(str(intent_data["flushVoltage"]))
+            self.input_flush_time.setText(str(intent_data["flushDuration"]))
             self.input_fill_params_amp.setText(str(intent_data["fillAmp"]))
             self.input_fill_params_freq.setText(str(intent_data["fillFrequency"]))
             self.input_trap_params_amp.setText(str(intent_data["trapAmp"]))
@@ -362,6 +363,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
             "fill": float(self.input_fill_time.text()),
             "release": float(self.input_release_time.text()),
             "trap": float(self.input_trap_time.text()),
+            "flushDuration": float(self.input_flush_time.text()),
             "flushVoltage": float(self.input_flush_voltage.text()),
             "fillAmp": float(self.input_fill_params_amp.text()),
             "fillFrequency": float(self.input_fill_params_freq.text()),
@@ -370,7 +372,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
             "releaseAmp": float(self.input_release_params_amp.text()),
             "releaseFrequency": float(self.input_release_params_freq.text()),
             "HDCpath": self.pathComboBox.currentText(),
-            "JHpath": self.JHpathComboBox.currentText(),
+            "JHpath": self.JHpathComboBox.currentText()
             }
         
         for twr in twr_list:
@@ -423,6 +425,8 @@ class DaytonaGUI(QtWidgets.QMainWindow):
                     parameter = row['Parameter']
                     fpga_address = self.fpga_register_lookup(board_id, parameter)
                     return fpga_address
+                elif "0x" in canonical_name:
+                    return format(int(canonical_name, 16), 'x').upper()
         # Not found → return None or default values
         return None, None
 

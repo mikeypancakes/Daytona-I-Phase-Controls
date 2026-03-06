@@ -470,7 +470,7 @@
                         </widget>
                        </item>
                        <item row="2" column="1">
-                        <widget class="QLineEdit" name="input_stall_time_4">
+                        <widget class="QLineEdit" name="input_flush_time">
                          <property name="text">
                           <string/>
                          </property>
@@ -705,7 +705,7 @@
                        <number>4</number>
                       </property>
                       <property name="columnCount">
-                       <number>5</number>
+                       <number>3</number>
                       </property>
                       <attribute name="horizontalHeaderCascadingSectionResizes">
                        <bool>true</bool>
@@ -732,8 +732,6 @@
                       <row/>
                       <row/>
                       <row/>
-                      <column/>
-                      <column/>
                       <column/>
                       <column/>
                       <column/>
@@ -807,7 +805,7 @@
                        <number>4</number>
                       </property>
                       <property name="columnCount">
-                       <number>5</number>
+                       <number>3</number>
                       </property>
                       <attribute name="horizontalHeaderCascadingSectionResizes">
                        <bool>true</bool>
@@ -834,8 +832,6 @@
                       <row/>
                       <row/>
                       <row/>
-                      <column/>
-                      <column/>
                       <column/>
                       <column/>
                       <column/>

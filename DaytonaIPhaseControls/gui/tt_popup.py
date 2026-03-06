@@ -2,16 +2,17 @@ from PyQt5 import QtWidgets, uic
 from PyQt5.QtWidgets import QFileDialog
 import os
 import csv
+import subprocess
 
 class ttPopup(QtWidgets.QWidget):
 
     def __init__(self, tt_dict, parent=None):
         super(ttPopup, self).__init__(parent) 
-        ui_path = os.path.join(os.path.dirname(__file__), 'tt_popup.ui')     
+        ui_path = os.path.join(os.path.dirname(__file__), 'tt_popup.ui')
         uic.loadUi(ui_path, self)
         self.setWindowTitle("Timing Table Output")
         self.tt_data = tt_dict
-        self.table_headers = ["Line", "Opcode", "Ticks", "Address", "Value"]
+        self.table_headers = ["Opcode", "Ticks", "Address", "Value"]
 
         self.search_btn.clicked.connect(self.browse_to_path)
         self.generateOUT_btn.clicked.connect(self.write_tts_to_csv)
@@ -39,11 +40,11 @@ class ttPopup(QtWidgets.QWidget):
             for row_index, row_data in enumerate(data):
                 row_position = table_widget.rowCount()
                 table_widget.insertRow(row_position)
-                line_item = QtWidgets.QTableWidgetItem(str(row_index))
-                table_widget.setItem(row_position, 0, line_item)
+                #line_item = QtWidgets.QTableWidgetItem(str(row_index))
+                #table_widget.setItem(row_position, 0, line_item)
                 for column_index, cell_value in enumerate(row_data.values()):
                     item = QtWidgets.QTableWidgetItem(str(cell_value))
-                    table_widget.setItem(row_position, column_index + 1, item)
+                    table_widget.setItem(row_position, column_index, item)
 
     def browse_to_path(self):
         pathname = QFileDialog.getExistingDirectory(self, "Open Directory")
@@ -79,9 +80,8 @@ class ttPopup(QtWidgets.QWidget):
             for row in range(table.rowCount()):
                 item = table.item(row, ticks_col_index)
                 if item:
-                    #text = int(item.text().strip().replace(',', ''))
-                    text = float(item.text())
-                    tick_sum += float(text)
+                    text = int(item.text())
+                    tick_sum += int(text)
 
             # Export to CSV
             filename = f"{table.objectName()}.csv"
@@ -95,6 +95,21 @@ class ttPopup(QtWidgets.QWidget):
                         row_data.append(item.text() if item else "")
                     writer.writerow(row_data)
 
-            print(str(int(tick_sum)))
-            print(type(tick_sum))
-        pass
+            bin_err = self.build_timing_tables(duration_ticks=tick_sum, board_id=board_ids[i], csv_file=file_path)
+
+            if bin_err:
+                print(f"Executable failed! Command: {bin_err.cmd}, Exit code: {bin_err.returncode}")
+
+    def build_timing_tables(self, duration_ticks, board_id, csv_file):
+        exe_path = os.path.join(os.path.join(os.path.dirname(__file__), '..', 'scripts', 'convert_csv.exe'))
+
+        try:
+            subprocess.run([
+                exe_path,
+                "--duration_ticks", str(duration_ticks),
+                "--board_id", str(board_id),
+                "--csv_file", str(csv_file)
+            ], check=True)  # check=True raises exception if the exe fails
+        
+        except subprocess.CalledProcessError as e:
+            return e

@@ -5,7 +5,6 @@ from gui.daytona_gui import DaytonaGUI
 
 #Daytona I-Phase Controls
 #2026
-#Date last updated: 03MAR2026 M.S.
 
 def main():
     app = QApplication([])
