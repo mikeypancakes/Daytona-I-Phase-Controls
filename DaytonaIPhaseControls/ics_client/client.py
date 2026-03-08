@@ -12,7 +12,6 @@ class ICS_Client:
 
     def send_request(self, endpoint, port, method='GET', data=None):
         url = f"http://{self.base_url}:{port}/{endpoint}"
-        print(url)
         try:
             if method == 'GET':
                 params = {'channels': data}

@@ -67,8 +67,9 @@ class DaytonaBase:
 
         for key in twr_profiles:
             profile = self.intent.get(key)
+            print(f"Profile: {profile}")
 
-            if len(profile['ramps']) > 0:
+            if profile is not None and len(profile['ramps']) > 0 :
                 
                 twr_dict[key] = {
                     "ramp_profile": []
@@ -90,23 +91,34 @@ class DaytonaBase:
                     })
 
         all_profiles = self.build_pathC_twr(twr_dict) #Will return None if no twave ramps are present, otherwise will return all three twave ramps.
-        self.build_twr_steps(all_profiles)
+
+        if all_profiles is not None:
+            self.build_twr_steps(all_profiles)
 
         return all_profiles
         
     def build_pathC_twr(self, profiles):
         pathC_dict = {}
-        for key in profiles.keys():
-            for ramp in profiles[key].keys():
-                ramp_steps = profiles[key][ramp]
-                if self.intent['HDCpath'] == "Both":
-                    pass              
-                else:
-                    if len(ramp_steps) > 1:
+
+        for key in profiles:
+            for ramp, ramp_steps in profiles[key].items():
+
+                if self.intent['HDCpath'] != "Both":
+
+                    valid_step = any(
+                        step['frequency'] is not None and step['amplitude'] is not None
+                        for step in ramp_steps
+                    )
+
+                    if valid_step:
                         pathC_dict[ramp] = ramp_steps
-                        profiles['pathC_traveling_wave_profile'] = pathC_dict
-                        return profiles
-    
+
+        if pathC_dict:
+            profiles['pathC_traveling_wave_profile'] = pathC_dict
+            return profiles
+
+        return None
+        
     def build_twr_steps(self, profiles):
 
         module_dict = {'pathA_traveling_wave_profile' : [self.TWAVE_Module_PathA, "Path A Traveling Wave.amplitude", "Path A Traveling Wave.frequency"],
@@ -514,7 +526,12 @@ class Daytona_SinglePath_tt(DaytonaBase):
         self.flush(abs_time_ms=self.intent['sipPeriod'] + sep_dt - self.intent['flushDuration'])
         self.loop(abs_time_ms=self.intent['sipPeriod'])
         self.end(abs_time_ms=self.intent['sipPeriod'], idle_twave_module = idle_module) 
-        self.build_profiles() if self.intent['pathA_traveling_wave_profile']['ramps'] or self.intent['pathB_traveling_wave_profile']['ramps'] else None
+
+        if any([
+            self.intent.get('pathA_traveling_wave_profile', {}).get('ramps'),
+            self.intent.get('pathB_traveling_wave_profile', {}).get('ramps')
+        ]):
+            self.build_profiles()
 
     def init_steps(self, abs_time_ms):
 

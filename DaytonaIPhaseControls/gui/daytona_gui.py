@@ -19,7 +19,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         ui_path = os.path.join(os.path.dirname(__file__), 'gui.ui')
         uic.loadUi(ui_path, self)
 
-        version = "v0.4"
+        version = "v0.5"
         title = "Daytona I-Phase Controls (PreRelease)"
         self.menuVersion.setTitle(version)
         self.setWindowTitle(title)
@@ -28,9 +28,14 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         self.HDC_paths = ["Both", "Path A", "Path B"]
         self.JH_paths = ["Passthrough", "Around", "Alternating"]
         self.ICD_options = ["Default", "Jughandle"]
+        self.paramter_tbl_headers = ["Canonical Name", "Board ID", "Parameter", "Setpoint"]
+        self.readback_tbl_headers = ['Parameter Name', 'Board ID', 'Parameter', 'Readback']
         self.pathComboBox.addItems(self.HDC_paths)
         self.JHpathComboBox.addItems(self.JH_paths)
         self.ICDComboBox.addItems(self.ICD_options)
+        self.column_combo_box.addItems(self.paramter_tbl_headers)
+
+        self.twr_tables = [self.pathA_tbl, self.pathB_tbl]
 
         self.updateGUI_with_intent(os.path.join(os.path.dirname(__file__), "config", "default_daytona_intent.json"))
 
@@ -38,8 +43,10 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         self.connect_btn.clicked.connect(self.connect_to_ICS)
         self.getreadbacks_btn.clicked.connect(lambda: self.get_readbacks(self.get_ics_channels(self.parameter_table), table_widget=self.parameter_table))
         self.method_combo_box.currentTextChanged.connect(self.on_method_dropdown_change)
+        self.intent_combo_box.currentTextChanged.connect(self.on_intent_dropdown_change)
         self.putsetpoints_btn.clicked.connect(lambda: self.post_setpoints(self.get_ics_channels(self.parameter_table)))
-        self.upload_method_btn.clicked.connect(self.load_csv_file)
+        self.upload_method_btn.clicked.connect(lambda: self.load_csv_file(self.parameter_table, self.paramter_tbl_headers[:-1]))
+        self.upload_readbacks_btn.clicked.connect(lambda: self.load_csv_file(self.params_table, self.readback_tbl_headers[:-1]))
         self.generateTT_btn.clicked.connect(self.generate_tt)
         self.addRow_TWRA_btn.clicked.connect(lambda: self.add_remove_row(self.pathA_tbl, add = True))
         self.addRow_TWRB_btn.clicked.connect(lambda: self.add_remove_row(self.pathB_tbl, add = True))
@@ -48,17 +55,33 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         self.add_row_btn.clicked.connect(self.add_plotter_tbl_row)
         self.remove_row_btn.clicked.connect(self.rmv_plotter_tbl_row)
         self.begin_plot_btn.clicked.connect(self.start_polling)
+        self.save_method_btn.clicked.connect(self.save_csv_file)
+        self.refreshMethods_btn.clicked.connect(self.find_methods)
+        self.uploadIntent_btn.clicked.connect(self.load_json_file)
+        self.saveIntent_btn.clicked.connect(self.save_json_file)
+        self.refreshIntents_btn.clicked.connect(self.find_intents)
+        self.stop_plot_btn.clicked.connect(self.stop_plotting)
+        self.export_data_btn.clicked.connect(self.export_plot_data)
+        self.clear_plot_btn.clicked.connect(self.clear_plot)
+
+        self.input_filter_text.textChanged.connect(self.filter_parameter_table)
+        self.column_combo_box.currentIndexChanged.connect(self.filter_parameter_table)
+        self.applyFilterBox.toggled.connect(
+            lambda checked: self.input_filter_text.clear() if not checked else None
+        )
 
         self.twr_headers = ['Time (ms)', 'Frequency (Hz)', 'Amplitude (V)']
+        
         self.pathA_tbl.setHorizontalHeaderLabels(self.twr_headers)
         self.pathB_tbl.setHorizontalHeaderLabels(self.twr_headers)
+        self.params_table.setHorizontalHeaderLabels(self.readback_tbl_headers)
 
         self.plotting_widget.setBackground('w')
         self.plotting_widget.clear()
         self.plotting_widget.addLegend()
         self.curve = self.plotting_widget.plot(pen=pg.mkPen(color='b', width=2))
         self.readback_data_series = [] 
-        self.readback_data = []
+        self.max_points = 500000 
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_readbacks)
 
@@ -66,6 +89,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         self.status_label.setStyleSheet("color: red; font-weight: bold;")
 
         self.find_methods()
+        self.find_intents()
         self.update_method_table(os.path.join(os.path.dirname(__file__), "methods", "init", "init_method_daytona.csv"))
 
     def add_plotter_tbl_row(self):
@@ -98,22 +122,67 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         msg.exec_()
 
     def update_readbacks(self):
-        address = self.address_input.text()
+
         self.get_readbacks(self.get_ics_channels(self.params_table), self.params_table)
 
+        table_data = self.get_table_data()
 
-    def update_plot(self, series_index, new_value):
-        series = self.readback_data_series[series_index]
-        series.append(new_value)
-        if len(series) > self.max_points:
-            series.pop(0)
-        self.curves[series_index].setData(series)
+        if len(self.readback_data_series) != len(table_data):
+            self.plotting_widget.clear()
+            self.plotting_widget.addLegend()
+            self.readback_data_series = [[] for _ in table_data]
+            self.curves = []
+            for i, row in enumerate(table_data):
+                param_name = row[0]
+                color = pg.intColor(i)
+                pen = pg.mkPen(color=color, width=2)
+                curve = self.plotting_widget.plot(pen=pen, name=param_name)
+                self.curves.append(curve)
+
+    def update_plot(self, list_of_readbacks):
+        for i, readback in enumerate(list_of_readbacks):
+            series = self.readback_data_series[i]
+            series.append(float(readback))
+            if len(series) > self.max_points:
+                series.pop(0)
+            self.curves[i].setData(series)
 
     def stop_plotting(self):
         self.timer.stop()
-        self.status_label.setText("Disconnected")
-        self.status_label.setStyleSheet("color: red; font-weight: bold;")
+        self.status_label.setText("Plotting Stopped")
+        self.status_label.setStyleSheet("color: black; font-weight: bold;")
 
+    def clear_plot(self):
+        self.plotting_widget.clear()
+        self.curves = []
+        self.readback_data_series = []
+
+    def export_plot_data(self):
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save Data as CSV", "", "CSV Files (*.csv);;All Files (*)")
+        
+        if not file_path:
+            return
+
+        if not file_path.endswith('.csv'):
+            file_path += '.csv'
+
+        try:
+            with open(file_path, mode='w', newline='') as file:
+                writer = csv.writer(file)
+                header = ['Index'] + [self.curves[i].name() for i in range(len(self.readback_data_series))]
+                writer.writerow(header)
+
+                max_length = max(len(series) for series in self.readback_data_series)
+                for i in range(max_length):
+                    row = [i]
+                    for series in self.readback_data_series:
+                        row.append(series[i] if i < len(series) else '')
+                    writer.writerow(row)
+
+            print(f"Data exported successfully to {file_path}")
+
+        except Exception as e:
+            print(f"Failed to write {file_path}: {e}")
 
     def get_table_data(self):
         table_data = []
@@ -158,11 +227,27 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         Scan the "methods" directory for available method CSV files and populate the method dropdown.
         Looks for CSV files in the "methods" directory and adds their names (without extension) to the dropdown menu.
         '''
+        current_item = self.method_combo_box.currentText()
         methods_dir = os.path.join(os.path.dirname(__file__), "methods")
         method_files = [f for f in os.listdir(methods_dir) if f.endswith('.csv')]
         method_names = [os.path.splitext(f)[0] for f in method_files]
+        dropdown_index = method_names.index(current_item) if current_item in method_names else -1
+
         self.method_combo_box.clear()
         self.method_combo_box.addItems(method_names)
+        self.method_combo_box.setCurrentIndex(dropdown_index)
+
+    def find_intents(self):
+
+        current_item = self.intent_combo_box.currentText()
+        intents_dir = os.path.join(os.path.dirname(__file__), "intents")
+        intent_files = [f for f in os.listdir(intents_dir) if f.endswith('.json')]
+        intents = [os.path.splitext(f)[0] for f in intent_files]
+        dropdown_index = intents.index(current_item) if current_item in intents else -1
+
+        self.intent_combo_box.clear()
+        self.intent_combo_box.addItems(intents)
+        self.intent_combo_box.setCurrentIndex(dropdown_index)
         
     def on_method_dropdown_change(self, method_name):
         '''
@@ -172,6 +257,15 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         if method_name:
             csv_file_path = os.path.join(os.path.dirname(__file__), "methods", f"{method_name}.csv")
             self.update_method_table(csv_file_path)
+
+    def on_intent_dropdown_change(self, intent_name):
+        '''
+        Handle changes in the method dropdown selection.
+        When a new method is selected, this function updates the parameter table with the corresponding CSV file for that method.
+        '''
+        if intent_name:
+            json_path = os.path.join(os.path.dirname(__file__), "intents", f"{intent_name}.json")
+            self.updateGUI_with_intent(json_path)
 
     def update_method_table(self, csv_file_path):
         '''
@@ -245,6 +339,9 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         for row, value in enumerate(values):
             table_widget.setItem(row, 4 if table_widget == self.parameter_table else 3, QTableWidgetItem(str(value)))
 
+        if table_widget == self.params_table:
+            self.update_plot(values)
+    
         return response
 
     def get_readbacks(self, data, table_widget):
@@ -267,7 +364,6 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         self.worker.start()
     
     def post_setpoints(self, data):
-        print(f"Posting setpoints for channels: {data}")
 
         payload = [{"canonical_name": canonical,"value": value} for canonical, value in data]
         
@@ -284,8 +380,8 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         self.worker.finished.connect(self.worker.deleteLater)  # safely delete after done
         self.worker.start()
 
-    def load_csv_file(self):
-        expected_columns = ['Canonical Name', 'Board ID', 'Parameter', 'Setpoint']
+    def load_csv_file(self, table, expected_columns):
+        
         
         options = QFileDialog.Options()
         file_name, _ = QFileDialog.getOpenFileName(
@@ -309,20 +405,96 @@ class DaytonaGUI(QtWidgets.QMainWindow):
                     print(f"CSV must contain columns: {expected_columns}")
                     return
 
-                self.parameter_table.setRowCount(0)  # Clear existing data
+                table.setRowCount(0)  # Clear existing data
 
                 for row_data in reader:
-                    row_index = self.parameter_table.rowCount()
-                    self.parameter_table.insertRow(row_index)
+                    row_index = table.rowCount()
+                    table.insertRow(row_index)
 
                     for col_index, col_name in enumerate(expected_columns):
                         value = row_data.get(col_name, "")
                         item = QTableWidgetItem(value)
-                        self.parameter_table.setItem(row_index, col_index, item)
+                        table.setItem(row_index, col_index, item)
 
         except Exception as e:
             print(f"Error loading CSV: {e}")
-    
+
+    def save_csv_file(self):
+
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Table CSV File",
+            "",
+            "CSV Files (*.csv);;All Files (*)",
+            options=options
+        )
+
+        if not file_name:
+            return
+
+        with open(file_name, "w", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
+
+            # Write header row
+            headers = []
+            for col in range(self.parameter_table.columnCount() - 1): #We dont want the readback column.
+                header = self.parameter_table.horizontalHeaderItem(col)
+                headers.append(header.text() if header else "")
+            writer.writerow(headers)
+
+            # Write table data
+            for row in range(self.parameter_table.rowCount()):
+                row_data = []
+                for col in range(self.parameter_table.columnCount() - 1): #We dont want the readback column.
+                    item = self.parameter_table.item(row, col)
+                    row_data.append(item.text() if item else "")
+                writer.writerow(row_data)
+
+    def load_json_file(self):
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open JSON File",
+            "",
+            "JSON Files (*.json);;All Files (*)",
+            options=options
+        )
+        
+        if not file_name:
+            return
+        
+        try:
+            self.updateGUI_with_intent(file_name)
+
+        except Exception as e:
+            print(f"Error loading JSON intent: {e}")
+
+    def save_json_file(self):
+
+        
+        dict_list =[]
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Intent",
+            "",
+            "JSON Files (*.json)"
+        )
+
+        if not file_path:
+            return
+
+        for table in self.twr_tables:
+            if not self.is_twr_table_empty(table):
+                tbl_dict = self.get_twrs_from_tables(table) if table == self.pathA_tbl else self.get_twrs_from_tables(table, pathA=False)
+                dict_list.append(tbl_dict)
+
+        intent = self.build_intent(dict_list)
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(intent, f, indent=4)
+
     def updateGUI_with_intent(self, intent):
         '''
         Update the GUI with the provided intent data.
@@ -382,7 +554,10 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         return intent
     
     def generate_tt(self):
-        twr_dictionarys_list = [self.get_twrs_from_tables(self.pathA_tbl), self.get_twrs_from_tables(self.pathB_tbl, pathA=False)]
+        twr_dictionarys_list = []
+        for table in self.twr_tables:
+            if not self.is_twr_table_empty(table):
+                twr_dictionarys_list.append(self.get_twrs_from_tables(self.pathA_tbl))
         intent = self.build_intent(twr_dictionarys_list)
         tt = Daytona_HDC_tt(intent=intent) if intent['HDCpath'] == 'Both' else Daytona_SinglePath_tt(intent=intent)
         tt_dictionary = tt.get_tts()
@@ -432,21 +607,25 @@ class DaytonaGUI(QtWidgets.QMainWindow):
 
     def update_twr_gui_tables(self, data_dict):
         twr_keys = ['pathA_traveling_wave_profile', 'pathB_traveling_wave_profile']
+        self.pathA_tbl.clearContents()
+        self.pathB_tbl.clearContents()
         for key in twr_keys:
-            ramps = data_dict[key]['ramps']
             table = self.pathA_tbl if key == 'pathA_traveling_wave_profile' else self.pathB_tbl
-            table.setRowCount(len(ramps) + 1)  # +1 for initial state
-            initial_state = data_dict[key]['initial_state']
-            table.setItem(0, 0, QTableWidgetItem(str(0)))
-            table.setItem(0, 1, QTableWidgetItem(str(initial_state['frequency'])))
-            table.setItem(0, 2, QTableWidgetItem(str(initial_state['amplitude'])))
-            for i, ramp in enumerate(ramps):
-                time = ramp['time']
-                frequency = ramp['state']['frequency']
-                amplitude = ramp['state']['amplitude']
-                table.setItem(i+1, 0, QTableWidgetItem(str(time)))
-                table.setItem(i+1, 1, QTableWidgetItem(str(frequency)))
-                table.setItem(i+1, 2, QTableWidgetItem(str(amplitude)))
+            if key in data_dict:
+                ramps = data_dict[key]['ramps']
+                if len(ramps) > 0:          
+                    table.setRowCount(len(ramps) + 1)  # +1 for initial state
+                    initial_state = data_dict[key]['initial_state']
+                    table.setItem(0, 0, QTableWidgetItem(str(0)))
+                    table.setItem(0, 1, QTableWidgetItem(str(initial_state['frequency'])))
+                    table.setItem(0, 2, QTableWidgetItem(str(initial_state['amplitude'])))
+                for i, ramp in enumerate(ramps):
+                    time = ramp['time']
+                    frequency = ramp['state']['frequency']
+                    amplitude = ramp['state']['amplitude']
+                    table.setItem(i+1, 0, QTableWidgetItem(str(time)))
+                    table.setItem(i+1, 1, QTableWidgetItem(str(frequency)))
+                    table.setItem(i+1, 2, QTableWidgetItem(str(amplitude)))
 
     def add_remove_row(self, twr_table, add = False):
         if add:
@@ -465,7 +644,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
 
             def get_cell(row, col):
                 item = table_input.item(row, col)
-                return float(item.text()) if item and item.text() not in ("", "initial") else 0.0
+                return float(item.text()) if item and item.text() not in ("", "initial") else None
 
             # Row 0 = initial state
             initial_state = {
@@ -489,4 +668,41 @@ class DaytonaGUI(QtWidgets.QMainWindow):
                     "initial_state": initial_state,
                     "ramps": ramps
                 }
-            }   
+            } 
+
+    def is_twr_table_empty(self, table_input):
+        for row in range(table_input.rowCount()):
+            for col in range(table_input.columnCount()):
+                item = table_input.item(row, col)
+                if item and item.text().strip():
+                    return False
+        return True
+
+    def filter_parameter_table(self):
+        if self.applyFilterBox.isChecked():
+            filter_text = self.input_filter_text.text().lower()
+            filter_column_name = self.column_combo_box.currentText()
+
+            # Get column index from header text
+            column_index = None
+            for col in range(self.parameter_table.columnCount()):
+                header = self.parameter_table.horizontalHeaderItem(col)
+                if header and header.text() == filter_column_name:
+                    column_index = col
+                    break
+
+            if column_index is None:
+                return
+
+            for row in range(self.parameter_table.rowCount()):
+                item = self.parameter_table.item(row, column_index)
+
+                if item and filter_text in item.text().lower():
+                    self.parameter_table.setRowHidden(row, False)
+                else:
+                    self.parameter_table.setRowHidden(row, True)
+
+        else:
+            # Show all rows if filter is disabled
+            for row in range(self.parameter_table.rowCount()):
+                self.parameter_table.setRowHidden(row, False)
