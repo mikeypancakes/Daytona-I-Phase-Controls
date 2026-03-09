@@ -11,6 +11,7 @@ from ics_client.client import ICS_Client
 from workers.request_worker import RequestWorker
 from tt_engine.tt_builder import Daytona_HDC_tt, Daytona_SinglePath_tt
 from scripts.fpga_map import SC, TW
+from ledeez.ledeez import LedStrip
 
 class DaytonaGUI(QtWidgets.QMainWindow):
 
@@ -19,7 +20,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         ui_path = os.path.join(os.path.dirname(__file__), 'gui.ui')
         uic.loadUi(ui_path, self)
 
-        version = "v0.5"
+        version = "v0.6"
         title = "Daytona I-Phase Controls (PreRelease)"
         self.menuVersion.setTitle(version)
         self.setWindowTitle(title)
@@ -87,10 +88,31 @@ class DaytonaGUI(QtWidgets.QMainWindow):
 
         self.status_label.setText("Disconnected")
         self.status_label.setStyleSheet("color: red; font-weight: bold;")
+        self.ledStatus_lbl.setText("Disconnected")
+        self.ledStatus_lbl.setStyleSheet("color: red; font-weight: bold;")
+        self.ICSconnectionStatus_lbl.setText("Disconnected")
+        self.ICSconnectionStatus_lbl.setStyleSheet("color: red; font-weight: bold;")
+        self.systemStatus_lbl.setText("Disconnected")
+        self.systemStatus_lbl.setStyleSheet("color: red; font-weight: bold;")
 
+        self.input_baud_rate.setText("115200")
+        self.numLEDs_input.setText("80")
+        self.LEDStatePollingInterval_input.setText("5")
+    
         self.find_methods()
         self.find_intents()
         self.update_method_table(os.path.join(os.path.dirname(__file__), "methods", "init", "init_method_daytona.csv"))
+
+        self.led_strip = LedStrip()
+        self.refreshCOMports()
+        self.refreshCOM_btn.clicked.connect(self.refreshCOMports)
+        self.connectLED_btn.clicked.connect(lambda: self.connectLEDs(com_port=self.com_comboBox.currentText(), baud_rate=self.input_baud_rate.text()))
+        self.errorStateLED_btn.clicked.connect(lambda: self.led_strip.set_LED_state(input_state='error'))
+        self.worklistStateLED_btn.clicked.connect(lambda: self.led_strip.set_LED_state(input_state='worklist'))
+        self.readyStateLED_btn.clicked.connect(lambda: self.led_strip.set_LED_state(input_state='ready'))
+        self.idleStateLED_btn.clicked.connect(lambda: self.led_strip.set_LED_state(input_state='init'))
+        self.offStateLED_btn.clicked.connect(lambda: self.led_strip.set_LED_state(input_state='off'))
+        self.LEDcount_btn.clicked.connect(lambda: self.led_strip.set_LED_state(input_state='update', value=self.numLEDs_input.text()))
 
     def add_plotter_tbl_row(self):
         row_position = self.params_table.rowCount()
@@ -706,3 +728,24 @@ class DaytonaGUI(QtWidgets.QMainWindow):
             # Show all rows if filter is disabled
             for row in range(self.parameter_table.rowCount()):
                 self.parameter_table.setRowHidden(row, False)
+    
+    def refreshCOMports(self):
+        list_of_coms = self.led_strip.find_ports()
+        if list_of_coms is not None:
+            self.com_comboBox.addItems(list_of_coms)
+    
+    def connectLEDs(self, com_port, baud_rate):
+        self.ledStatus_lbl.setText("In Progress")
+        self.ledStatus_lbl.setStyleSheet("color: blue; font-weight: bold;")
+        self.led_worker = RequestWorker(self.led_strip.connect, com_port, baud_rate)
+        self.led_worker.finished.connect(self.on_connect_finished)
+        self.led_worker.start()
+
+    def on_connect_finished(self, result):
+        if isinstance(result, Exception):
+            print("Connection failed:", result)
+        else:
+            self.ledStatus_lbl.setText("Connected")
+            self.ledStatus_lbl.setStyleSheet("color: green; font-weight: bold;")
+            print("Connection result:", result)
+            self.led_strip.set_LED_state(input_state='init')
