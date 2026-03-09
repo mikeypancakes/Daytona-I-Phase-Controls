@@ -1,3 +1,5 @@
+Pretty rad custom software to control a hunk of electronics.
+
 # Daytona-I-Phase-Controls
 Controls for the Daytona Investigation Prototype.
 
