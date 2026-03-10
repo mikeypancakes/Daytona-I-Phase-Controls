@@ -137,8 +137,8 @@ class DaytonaBase:
                     ramp_start = list(profiles[profile_key]['ramp_profile'][profile].values())
                     ramp_end = list(profiles[profile_key]['ramp_profile'][profile + 1].values())
                     ramp_steps.insert(profile, ramp_start)
-                    delta_t_ticks_hex = hex((int(ramp_end[0]) - int(ramp_start[0])) * 10)[2:].zfill(4)
-                    ramp_frequency_hex = hex(int((10**8)/(32*int(ramp_end[1]))))[2:].zfill(4)
+                    delta_t_ticks_hex = hex((int(ramp_end[0] - ramp_start[0])) * 10)[2:].zfill(4)
+                    ramp_frequency_hex = hex(int((10**8)/(32*ramp_end[1])))[2:].zfill(4)
                     ramp_amplitude_hex = hex(int(ramp_end[2]/100 * 4095))[2:].zfill(4)
                     amplitude_hex_values.insert(profile,(ramp_amplitude_hex + delta_t_ticks_hex))
                     frequency_hex_values.insert(profile,(ramp_frequency_hex + delta_t_ticks_hex))
@@ -163,12 +163,12 @@ class DaytonaBase:
                                     opcodeCommand.WRITE,
                                     ramp[0]) #absolute time
                     
-                    module.add_step(hex(TwaveAddresses.TWAVE_INITIAL_AMPLITUDE_ADDRESS),
+                    module.add_step(hex(TwaveAddresses.TWAVE_RAMP_END_AMPLITUDE),
                                     amplitude_float_values[line], #Ramplitude
                                     opcodeCommand.WRITE,
                                     ramp[0]) #absolute time
 
-            #print(f"Amplitude Hex: {amplitude_hex_values}, Frequency Hex: {frequency_hex_values}, Amplitude Float: {amplitude_float_values}, Frequency Float: {frequency_float_values}, Ramp Steps: {ramp_steps}")
+            print(f"Profile: {profile_key}, Amplitude Hex: {amplitude_hex_values}, Frequency Hex: {frequency_hex_values}, Amplitude Float: {amplitude_float_values}, Frequency Float: {frequency_float_values}, Ramp Steps: {ramp_steps}")
     
             amplitude_hex_values.clear()
             amplitude_float_values.clear()
@@ -532,6 +532,8 @@ class Daytona_SinglePath_tt(DaytonaBase):
             self.intent.get('pathB_traveling_wave_profile', {}).get('ramps')
         ]):
             self.build_profiles()
+
+        print(f"Timing Table Steps: {self.TWAVE_Module_PathA.steps}")
 
     def init_steps(self, abs_time_ms):
 
