@@ -645,18 +645,18 @@ class Daytona_SinglePath_tt(DaytonaBase):
                                         opcodeCommand.WRITE, 
                                         abs_time_ms)
         
-        self.pathSelection_dict[self.intent['HDCpath']][0].add_step("OBA Traveling Wave.amplitude", #Close fill gate, begin trap
+        self.TWAVE_Module_PathC.add_step("OBA Traveling Wave.amplitude", #Close fill gate, begin trap
                                          self.intent['releaseAmp'], 
                                          opcodeCommand.WRITE, 
                                          abs_time_ms)
         
-        self.pathSelection_dict[self.intent['HDCpath']][0].add_step("OBA Traveling Wave.frequency", #Close fill gate, begin trap
+        self.TWAVE_Module_PathC.add_step("OBA Traveling Wave.frequency", #Close fill gate, begin trap
                                          self.intent['releaseFrequency'], 
                                          opcodeCommand.WRITE, 
                                          abs_time_ms)
         
         self.TWAVE_Module_PathC.add_step("OBA Traveling Wave.direction",
-                                         1.0 if self.intent['HDCpath'] == 'Path A' else 0.0, #Set FWD to go down path A
+                                         0.0 if self.intent['HDCpath'] == 'Path A' else 0.0, #Set FWD to go down path A
                                          opcodeCommand.WRITE, 
                                          abs_time_ms)
         
