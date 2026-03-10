@@ -1333,7 +1333,7 @@
       </widget>
       <widget class="QWidget" name="tab">
        <attribute name="title">
-        <string>System State</string>
+        <string>System Configuration</string>
        </attribute>
        <layout class="QVBoxLayout" name="verticalLayout_45">
         <item>
@@ -1647,6 +1647,13 @@
                     <string>Set Mode</string>
                    </property>
                    <layout class="QHBoxLayout" name="horizontalLayout_20">
+                    <item>
+                     <widget class="QPushButton" name="lmodeStateLED_btn">
+                      <property name="text">
+                       <string>L-Mode</string>
+                      </property>
+                     </widget>
+                    </item>
                     <item>
                      <widget class="QPushButton" name="errorStateLED_btn">
                       <property name="text">

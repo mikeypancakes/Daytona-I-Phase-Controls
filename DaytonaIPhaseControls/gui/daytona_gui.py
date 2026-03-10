@@ -20,7 +20,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         ui_path = os.path.join(os.path.dirname(__file__), 'gui.ui')
         uic.loadUi(ui_path, self)
 
-        version = "v0.6"
+        version = "v0.7"
         title = "Daytona I-Phase Controls (PreRelease)"
         self.menuVersion.setTitle(version)
         self.setWindowTitle(title)
@@ -112,6 +112,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         self.readyStateLED_btn.clicked.connect(lambda: self.led_strip.set_LED_state(input_state='ready'))
         self.idleStateLED_btn.clicked.connect(lambda: self.led_strip.set_LED_state(input_state='init'))
         self.offStateLED_btn.clicked.connect(lambda: self.led_strip.set_LED_state(input_state='off'))
+        self.lmodeStateLED_btn.clicked.connect(lambda: self.led_strip.set_LED_state(input_state='cylon'))
         self.LEDcount_btn.clicked.connect(lambda: self.led_strip.set_LED_state(input_state='update', value=self.numLEDs_input.text()))
 
     def add_plotter_tbl_row(self):

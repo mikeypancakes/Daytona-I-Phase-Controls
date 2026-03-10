@@ -17,7 +17,8 @@ class LedStrip:
             'worklist' : 'w',
             'error' : 'e',
             'off' : 'o',
-            'update' : 'u'
+            'update' : 'u',
+            'cylon' : 'c'
         }
 
     def connect(self, com_port, baud_rate):
