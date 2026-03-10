@@ -656,7 +656,7 @@ class Daytona_SinglePath_tt(DaytonaBase):
                                          abs_time_ms)
         
         self.TWAVE_Module_PathC.add_step("OBA Traveling Wave.direction",
-                                         0.0 if self.intent['HDCpath'] == 'Path A' else 0.0, #Set FWD to go down path A
+                                         0.0 if self.intent['HDCpath'] == 'Path A' else 1.0, #Set FWD to go down path A
                                          opcodeCommand.WRITE, 
                                          abs_time_ms)
         
