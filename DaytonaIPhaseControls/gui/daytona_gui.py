@@ -20,7 +20,7 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         ui_path = os.path.join(os.path.dirname(__file__), 'gui.ui')
         uic.loadUi(ui_path, self)
 
-        version = "v0.7.3"
+        version = "v0.7.4"
         title = "Daytona I-Phase Controls (PreRelease)"
         self.menuVersion.setTitle(version)
         self.setWindowTitle(title)
@@ -495,7 +495,6 @@ class DaytonaGUI(QtWidgets.QMainWindow):
 
     def save_json_file(self):
 
-        
         dict_list =[]
 
         file_path, _ = QFileDialog.getSaveFileName(
@@ -580,7 +579,8 @@ class DaytonaGUI(QtWidgets.QMainWindow):
         twr_dictionarys_list = []
         for table in self.twr_tables:
             if not self.is_twr_table_empty(table):
-                twr_dictionarys_list.append(self.get_twrs_from_tables(self.pathA_tbl))
+                is_tblA = True if table == self.pathA_tbl else False
+                twr_dictionarys_list.append(self.get_twrs_from_tables(table, pathA=is_tblA))
         intent = self.build_intent(twr_dictionarys_list)
         tt = Daytona_HDC_tt(intent=intent) if intent['HDCpath'] == 'Both' else Daytona_SinglePath_tt(intent=intent)
         tt_dictionary = tt.get_tts()
@@ -693,12 +693,17 @@ class DaytonaGUI(QtWidgets.QMainWindow):
                 }
             } 
 
-    def is_twr_table_empty(self, table_input):
-        for row in range(table_input.rowCount()):
-            for col in range(table_input.columnCount()):
-                item = table_input.item(row, col)
-                if item and item.text().strip():
+    def is_twr_table_empty(self, table):
+        model = table.model()
+
+        for row in range(model.rowCount()):
+            for col in range(model.columnCount()):
+                index = model.index(row, col)
+                data = model.data(index)
+
+                if data and str(data).strip():
                     return False
+
         return True
 
     def filter_parameter_table(self):

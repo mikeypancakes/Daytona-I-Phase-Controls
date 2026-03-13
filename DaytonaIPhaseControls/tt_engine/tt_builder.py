@@ -67,7 +67,6 @@ class DaytonaBase:
 
         for key in twr_profiles:
             profile = self.intent.get(key)
-            print(f"Profile: {profile}")
 
             if profile is not None and len(profile['ramps']) > 0 :
                 
@@ -495,9 +494,7 @@ class Daytona_HDC_tt(DaytonaBase):
             freqs = np.array([freq_ramp['frequency'] for freq_ramp in ramp_profile['ramp_profile']])  
             amps = np.array([freq_ramp['amplitude'] for freq_ramp in ramp_profile['ramp_profile']])
 
-            sip_freq = np.interp(SIP_period, times, freqs)
-
-            print(times, freqs, sip_freq)       
+            sip_freq = np.interp(SIP_period, times, freqs)  
 
 class Daytona_SinglePath_tt(DaytonaBase):
 
@@ -525,15 +522,13 @@ class Daytona_SinglePath_tt(DaytonaBase):
         self.release(abs_time_ms=0.0)
         self.flush(abs_time_ms=self.intent['sipPeriod'] + sep_dt - self.intent['flushDuration'])
         self.loop(abs_time_ms=self.intent['sipPeriod'])
-        self.end(abs_time_ms=self.intent['sipPeriod'], idle_twave_module = idle_module) 
+        self.end(abs_time_ms=self.intent['sipPeriod'], idle_twave_module = idle_module)
 
         if any([
             self.intent.get('pathA_traveling_wave_profile', {}).get('ramps'),
             self.intent.get('pathB_traveling_wave_profile', {}).get('ramps')
         ]):
             self.build_profiles()
-
-        print(f"Timing Table Steps: {self.TWAVE_Module_PathA.steps}")
 
     def init_steps(self, abs_time_ms):
 
